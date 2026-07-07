@@ -32,8 +32,17 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
       points ; famille parmi d'autres, non centrale
 - [x] Palettes **HSV** et **dégradés multi-arrêts** (`palettes/procedural.py`)
 
-  Reste à faire en Phase 2+ : bruit **Simplex** proprement dit (aujourd'hui
-  approché par fBm) ; bruit modulant aussi épaisseur et lumière ; palettes HSL.
+## Phase 2+ — Compléments ✅ (livré)
+
+- [x] Bruit **Simplex** 2D véritable (`noise/fields.py::simplex2d`), grille de
+      triangles sans artefacts directionnels
+- [x] Bruit modulant aussi **la lumière** (poids lumineux par point) et
+      **l'épaisseur** (rayon de trait par point) — champs `light_noise` et
+      `thickness_noise` de la couche, appliqués dans l'accumulation
+- [x] Palettes **HSL** (`palettes/procedural.py::hsl_palette`)
+
+  Reste ouvert : palettes procédurales encore plus riches (palettes nommées,
+  contraintes d'harmonie), bruit 3D pour l'animation temporelle.
 
 ## Phase 3 — Système de particules
 

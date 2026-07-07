@@ -102,10 +102,64 @@ def worley2d(x: np.ndarray, y: np.ndarray, seed: int) -> np.ndarray:
     return np.clip(np.sqrt(best), 0.0, 1.0)
 
 
+_F2 = 0.5 * (np.sqrt(3.0) - 1.0)
+_G2 = (3.0 - np.sqrt(3.0)) / 6.0
+_GRAD12 = np.array(
+    [[1, 1], [-1, 1], [1, -1], [-1, -1], [1, 0], [-1, 0],
+     [1, 0], [-1, 0], [0, 1], [0, -1], [0, 1], [0, -1]],
+    dtype=np.float64,
+)
+
+
+def simplex2d(x: np.ndarray, y: np.ndarray, seed: int) -> np.ndarray:
+    """Bruit Simplex 2D (Perlin/Gustavson), vectorisé. Résultat dans ~``[-1, 1]``.
+
+    Contrairement au Perlin sur grille carrée, le Simplex échantillonne une grille
+    de triangles : moins d'artefacts directionnels, gradient continu, coût moindre
+    en dimensions supérieures.
+    """
+    rng = np.random.default_rng(seed)
+    perm = rng.permutation(256).astype(np.int64)
+    perm = np.concatenate((perm, perm))  # longueur 512, évite les modulos
+    perm_mod12 = perm % 12
+
+    s = (x + y) * _F2
+    i = np.floor(x + s).astype(np.int64)
+    j = np.floor(y + s).astype(np.int64)
+    t = (i + j) * _G2
+    x0 = x - (i - t)
+    y0 = y - (j - t)
+
+    upper = x0 > y0
+    i1 = np.where(upper, 1, 0)
+    j1 = np.where(upper, 0, 1)
+
+    x1 = x0 - i1 + _G2
+    y1 = y0 - j1 + _G2
+    x2 = x0 - 1.0 + 2.0 * _G2
+    y2 = y0 - 1.0 + 2.0 * _G2
+
+    ii = i & 255
+    jj = j & 255
+    gi0 = perm_mod12[ii + perm[jj]]
+    gi1 = perm_mod12[ii + i1 + perm[jj + j1]]
+    gi2 = perm_mod12[ii + 1 + perm[jj + 1]]
+
+    def _corner(gi, xx, yy):
+        tt = 0.5 - xx * xx - yy * yy
+        g = _GRAD12[gi]
+        return np.where(tt < 0, 0.0, (tt ** 4) * (g[..., 0] * xx + g[..., 1] * yy))
+
+    total = _corner(gi0, x0, y0) + _corner(gi1, x1, y1) + _corner(gi2, x2, y2)
+    return 70.0 * total
+
+
 def sample(kind: str, x: np.ndarray, y: np.ndarray, seed: int) -> np.ndarray:
     """Dispatch générique. Sortie normalisée dans ~``[-1, 1]`` pour tous les types."""
     if kind == "perlin":
         return perlin2d(x, y, seed)
+    if kind == "simplex":
+        return simplex2d(x, y, seed)
     if kind == "fbm":
         return fbm(x, y, seed)
     if kind == "worley":

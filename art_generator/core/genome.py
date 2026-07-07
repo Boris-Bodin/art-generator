@@ -65,11 +65,13 @@ class LayerGenome:
     symmetry: str = "none"  # none | mirror | radial | kaleidoscope
     symmetry_order: int = 6
 
-    # --- déformation par bruit (Phase 2) ---
-    noise_type: str = "none"  # none | perlin | fbm | worley
+    # --- déformation par bruit (Phase 2 / 2+) ---
+    noise_type: str = "none"  # none | perlin | simplex | fbm | worley
     warp: float = 0.0  # amplitude de déformation du domaine (coordonnées)
     warp_freq: float = 1.5  # fréquence spatiale du bruit de warp
     color_noise: float = 0.0  # modulation des valeurs de coloration par le bruit
+    light_noise: float = 0.0  # modulation de la luminosité par point (0 = aucune)
+    thickness_noise: float = 0.0  # épaisseur additionnelle max (px) pilotée par bruit
     noise_seed: int = 0
 
 

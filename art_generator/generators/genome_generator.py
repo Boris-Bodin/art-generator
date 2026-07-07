@@ -18,7 +18,7 @@ from . import quality
 _SYMMETRIES = ["none", "mirror", "radial", "kaleidoscope"]
 
 
-_NOISE_TYPES = ["perlin", "fbm", "worley"]
+_NOISE_TYPES = ["perlin", "simplex", "fbm", "worley"]
 
 # densité de points indicative par famille
 _POINTS = {
@@ -45,9 +45,9 @@ def _related_palette(base: PaletteGenome, rng: RNG) -> PaletteGenome:
             mode="cosine", offset=base.offset, amp=base.amp, freq=base.freq,
             phase=tuple(p + shift for p in base.phase),
         )
-    if base.mode == "hsv":
+    if base.mode in ("hsv", "hsl"):
         return PaletteGenome(
-            mode="hsv", hue=((base.hue[0] + shift) % 1.0, base.hue[1]),
+            mode=base.mode, hue=((base.hue[0] + shift) % 1.0, base.hue[1]),
             sat=base.sat, val=base.val,
         )
     return base
@@ -55,13 +55,15 @@ def _related_palette(base: PaletteGenome, rng: RNG) -> PaletteGenome:
 
 def _noise_settings(rng: RNG) -> dict:
     """Réglages de bruit d'une couche : warp du domaine + modulation couleur."""
-    if not rng.chance(0.4):
+    if not rng.chance(0.45):
         return {"noise_type": "none"}
     return {
         "noise_type": rng.choice(_NOISE_TYPES),
-        "warp": rng.uniform(0.05, 0.3),
+        "warp": rng.uniform(0.05, 0.3) if rng.chance(0.75) else 0.0,
         "warp_freq": rng.uniform(0.6, 3.0),
         "color_noise": rng.uniform(0.0, 0.3) if rng.chance(0.5) else 0.0,
+        "light_noise": rng.uniform(0.2, 0.7) if rng.chance(0.5) else 0.0,
+        "thickness_noise": rng.choice([0.0, 0.0, 2.0, 3.0]) if rng.chance(0.4) else 0.0,
         "noise_seed": rng.randint(0, 2**31 - 1),
     }
 
