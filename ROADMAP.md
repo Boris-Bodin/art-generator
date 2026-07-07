@@ -68,32 +68,35 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
   Reste ouvert : advection GPU (voir dette technique) et taille/opacité par
   particule variables dans le temps (Phase 4, animation).
 
-## Phase 4 — Composition & fonds
+## Phase 4 — Composition & fonds ✅ (livré)
 
-Aujourd'hui le rendu est un « light painting » **additif** : chaque couche vaut
-noir là où il n'y a pas de forme, ce qui rend le fond noir quasi obligatoire (en
-mode `normal` la couche remplace le fond ; sur fond clair une forme lumineuse se
-lave). L'objet de cette phase est de **découpler la forme du fond** et d'élargir
-les fonds et le cadrage — sans casser les invariants (seed→pixels identiques,
-round-trip JSON). Tout nouveau paramètre passe par le génome et est tiré par
-`generators/genome_generator.py`.
+Le rendu était un « light painting » **additif** : chaque couche valait noir là
+où il n'y avait pas de forme, rendant le fond noir quasi obligatoire. Cette phase
+**découple la forme du fond** (compositing par alpha) et élargit fonds et cadrage,
+sans casser les invariants (seed→pixels identiques, round-trip JSON — le rendu
+sur fond noir reste identique au pixel près). Tout nouveau paramètre passe par le
+génome et est tiré par `generators/genome_generator.py`.
 
-- [ ] **4a — Compositing par alpha** : `render_layer` expose une couverture
-      (alpha) dérivée de la densité `acc_w` (déjà calculée dans
-      `renderers/accumulation.py`) ; l'engine compose la couche sur le fond via
-      cet alpha, de sorte que les zones vides laissent transparaître le fond
-      quel qu'il soit (fin du fond noir implicite).
-- [ ] **4b — Mode « encre sur papier » (soustractif)** : second modèle de rendu
-      où le pigment *assombrit* le support au lieu d'ajouter de la lumière, pour
-      des formes sombres lisibles sur fond clair. Choix du modèle (additif /
-      encre) porté par le génome, à côté de l'additif existant.
-- [ ] **4c — Fonds enrichis** (`core/background.py`) : uni, dégradés
-      directionnels et **radiaux**, éventuellement vignette ; au-delà des
-      `black`/`white`/`gradient` actuels.
-- [ ] **4d — Cadrage par densité** (`utils/math_utils.py::fit_to_canvas`) :
-      centrer/mettre à l'échelle sur le **centroïde pondéré par la densité**
-      (là où il y a le plus de points) plutôt que sur le milieu de la boîte des
-      percentiles, pour cadrer sur le cœur de la forme.
+- [x] **4a — Compositing par alpha** : `render_layer` renvoie désormais
+      `(color, alpha)`, la couverture `alpha` étant dérivée de la densité
+      (`renderers/accumulation.py::_resolve`) ; l'engine compose via
+      `core/blend.py::composite`, de sorte que les zones vides (`alpha = 0`)
+      laissent transparaître le fond quel qu'il soit (fin du fond noir implicite).
+      La couleur non prémultipliée garantit que `color·alpha` reproduit l'ancien
+      tampon additif → fond noir inchangé.
+- [x] **4b — Mode « encre sur papier » (soustractif)** : modèle de rendu `ink`
+      (champ `LayerGenome.render_model`) où le pigment *absorbe* la lumière du
+      support (`out = base·(1 - a·(1 - color))`) au lieu d'en ajouter ; les
+      couches s'assombrissent en s'empilant, rendant des formes sombres lisibles
+      sur papier clair. Le générateur produit ~25 % d'œuvres à l'encre, avec
+      palettes de pigments sombres et fonds « papier ».
+- [x] **4c — Fonds enrichis** (`core/background.py`) : dégradés **directionnels**
+      (paramètre `angle`) et **radiaux** (`radial`), plus **vignette**
+      optionnelle applicable à tout fond ; au-delà des `black`/`white`/`gradient`.
+- [x] **4d — Cadrage par densité** (`utils/math_utils.py::fit_to_canvas`,
+      paramètre `center_on`) : le mode `density` centre sur le **centroïde
+      pondéré par la densité** et met à l'échelle sur un **rayon robuste**, pour
+      cadrer sur le cœur de la forme (champ `LayerGenome.framing`).
 
 ## Phase 5 — Performance
 

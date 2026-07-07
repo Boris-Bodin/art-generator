@@ -59,6 +59,14 @@ class LayerGenome:
     blend_mode: str = "add"  # normal | add | screen | multiply | difference
     opacity: float = 1.0
 
+    # --- modèle de rendu (Phase 4) ---
+    # 'light' : light painting additif (le pigment ajoute de la lumière) ;
+    # 'ink'   : encre soustractive (le pigment assombrit le support).
+    render_model: str = "light"  # light | ink
+    # Cadrage de la couche : 'box' = milieu de la boîte des percentiles (robuste,
+    # historique) ; 'density' = centroïde pondéré par la densité (cœur de la forme).
+    framing: str = "box"  # box | density
+
     thickness: float = 1.0
     glow: float = 0.6
     exposure: float = 1.0
@@ -88,7 +96,7 @@ class ArtworkGenome:
     width: int = 1600
     height: int = 1600
 
-    background: str = "black"  # black | white | gradient
+    background: str = "black"  # black | white | gradient | radial
     background_params: dict[str, Any] = field(default_factory=dict)
 
     layers: list[LayerGenome] = field(default_factory=lambda: [LayerGenome()])

@@ -26,10 +26,12 @@ class Engine:
 
         for layer in genome.layers:
             equation = registry.build(layer.equation_family, layer.equation_params)
-            layer_rgb = accumulation.render_layer(
+            color, alpha = accumulation.render_layer(
                 equation, layer, genome.width, genome.height
             )
-            canvas = blend.blend(canvas, layer_rgb, layer.blend_mode, layer.opacity)
+            canvas = blend.composite(
+                canvas, color, alpha, layer.blend_mode, layer.opacity, layer.render_model
+            )
 
         arr = (np.clip(canvas, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
         return Image.fromarray(arr, mode="RGB")

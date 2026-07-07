@@ -93,12 +93,24 @@ def _apply_noise(
 
 def render_layer(
     equation: Equation, layer: LayerGenome, width: int, height: int
-) -> np.ndarray:
-    """Rend une couche complète et renvoie un tampon ``(H, W, 3)`` dans ``[0, 1]``."""
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rend une couche et renvoie ``(color, alpha)`` (Phase 4).
+
+    * ``color`` ``(H, W, 3)`` — couleur *non prémultipliée* de la couche ;
+    * ``alpha`` ``(H, W)`` — couverture dans ``[0, 1]`` dérivée de la densité.
+
+    La composition sur le fond (par cet alpha) est déléguée à
+    :func:`art_generator.core.blend.composite`, ce qui découple la forme du fond :
+    les zones vides (``alpha = 0``) laissent transparaître le fond.
+    """
+    zero = (
+        np.zeros((height, width, 3), dtype=np.float64),
+        np.zeros((height, width), dtype=np.float64),
+    )
     points, values = equation.sample(layer.n_points)
     points, values = clean_points(points, values)
     if len(points) == 0:
-        return np.zeros((height, width, 3), dtype=np.float64)
+        return zero
 
     # Centrage robuste avant symétrie (rotations/miroirs corrects).
     center = np.median(points, axis=0)
@@ -111,9 +123,9 @@ def render_layer(
 
     weight, radius = _point_modulation(points, layer)
 
-    coords, inside = fit_to_canvas(points, width, height)
+    coords, inside = fit_to_canvas(points, width, height, center_on=layer.framing)
     if len(coords) == 0:
-        return np.zeros((height, width, 3), dtype=np.float64)
+        return zero
     values = values[inside]
     weight = weight[inside]
     radius = radius[inside]
@@ -133,11 +145,25 @@ def render_layer(
         np.add.at(acc_col, (ny[m], nx[m]), colors[m])
         np.add.at(acc_w, (ny[m], nx[m]), weight[m])
 
-    return _tonemap(acc_col, acc_w, layer)
+    return _resolve(acc_col, acc_w, layer)
 
 
-def _tonemap(acc_col: np.ndarray, acc_w: np.ndarray, layer: LayerGenome) -> np.ndarray:
-    """Compression tonale HDR + halo."""
+def _blur(a: np.ndarray, radius: int = 6) -> np.ndarray:
+    """Flou gaussien d'un tampon flottant ``[0, 1]`` via PIL (mono ou RVB)."""
+    img = Image.fromarray((np.clip(a, 0, 1) * 255).astype(np.uint8))
+    return np.asarray(img.filter(ImageFilter.GaussianBlur(radius=radius)), np.float64) / 255.0
+
+
+def _resolve(
+    acc_col: np.ndarray, acc_w: np.ndarray, layer: LayerGenome
+) -> tuple[np.ndarray, np.ndarray]:
+    """Compression tonale HDR + halo → ``(color, alpha)`` (Phase 4).
+
+    La luminance compressée sert de **couverture** (``alpha``) : dense = opaque,
+    vide = transparent. La couleur renvoyée est *non prémultipliée* (``avg_col``),
+    de sorte que ``color * alpha`` reproduit exactement l'ancien tampon additif —
+    le rendu sur fond noir reste identique au pixel près.
+    """
     eps = 1e-9
     # Teinte moyenne par pixel.
     avg_col = acc_col / np.maximum(acc_w[..., None], eps)
@@ -151,13 +177,15 @@ def _tonemap(acc_col: np.ndarray, acc_w: np.ndarray, layer: LayerGenome) -> np.n
             bright = np.clip(bright / hi, 0.0, 1.0)
     bright = np.power(bright, 0.65)  # relèvement des tons sombres
 
-    layer_rgb = avg_col * bright[..., None]
+    premult = avg_col * bright[..., None]  # couleur prémultipliée (= ancien layer_rgb)
+    alpha = bright
 
     if layer.glow > 0:
-        img = Image.fromarray((np.clip(layer_rgb, 0, 1) * 255).astype(np.uint8))
-        blurred = np.asarray(
-            img.filter(ImageFilter.GaussianBlur(radius=6)), dtype=np.float64
-        ) / 255.0
-        layer_rgb = layer_rgb + layer.glow * blurred
+        # Le halo enrichit couleur *et* couverture, de façon cohérente.
+        premult = premult + layer.glow * _blur(premult)
+        alpha = alpha + layer.glow * _blur(alpha)
 
-    return np.clip(layer_rgb, 0.0, 1.0)
+    alpha = np.clip(alpha, 0.0, 1.0)
+    # Dé-prémultiplication : color * alpha == premult (couverture non écrêtée à 0).
+    color = premult / np.maximum(alpha[..., None], eps)
+    return color, alpha
