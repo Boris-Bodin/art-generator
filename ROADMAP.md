@@ -68,21 +68,62 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
   Reste ouvert : advection GPU (voir dette technique) et taille/opacité par
   particule variables dans le temps (Phase 4, animation).
 
-## Phase 4 — Animation & export
+## Phase 4 — Composition & fonds
 
-- [ ] Animation des paramètres, couleurs, particules, équations (keyframes)
-- [ ] Export GIF, MP4, séquences PNG
+Aujourd'hui le rendu est un « light painting » **additif** : chaque couche vaut
+noir là où il n'y a pas de forme, ce qui rend le fond noir quasi obligatoire (en
+mode `normal` la couche remplace le fond ; sur fond clair une forme lumineuse se
+lave). L'objet de cette phase est de **découpler la forme du fond** et d'élargir
+les fonds et le cadrage — sans casser les invariants (seed→pixels identiques,
+round-trip JSON). Tout nouveau paramètre passe par le génome et est tiré par
+`generators/genome_generator.py`.
+
+- [ ] **4a — Compositing par alpha** : `render_layer` expose une couverture
+      (alpha) dérivée de la densité `acc_w` (déjà calculée dans
+      `renderers/accumulation.py`) ; l'engine compose la couche sur le fond via
+      cet alpha, de sorte que les zones vides laissent transparaître le fond
+      quel qu'il soit (fin du fond noir implicite).
+- [ ] **4b — Mode « encre sur papier » (soustractif)** : second modèle de rendu
+      où le pigment *assombrit* le support au lieu d'ajouter de la lumière, pour
+      des formes sombres lisibles sur fond clair. Choix du modèle (additif /
+      encre) porté par le génome, à côté de l'additif existant.
+- [ ] **4c — Fonds enrichis** (`core/background.py`) : uni, dégradés
+      directionnels et **radiaux**, éventuellement vignette ; au-delà des
+      `black`/`white`/`gradient` actuels.
+- [ ] **4d — Cadrage par densité** (`utils/math_utils.py::fit_to_canvas`) :
+      centrer/mettre à l'échelle sur le **centroïde pondéré par la densité**
+      (là où il y a le plus de points) plutôt que sur le milieu de la boîte des
+      percentiles, pour cadrer sur le cœur de la forme.
+
+## Phase 5 — Performance
+
+- [ ] Optimisation : vectorisation poussée, multiprocessing
+- [ ] Accélération GPU (OpenGL/Vulkan/GLSL, Numba/CUDA) sur les points chauds
+      (itération des attracteurs, accumulation, advection de particules)
+- [ ] **Viabilité affinée** : critère de « surface minimale » plus fin pour
+      rejeter les formes quasi 1D que le contrôle actuel laisse passer
+      (`generators/quality.py`).
+
+## Phase 6 — Export
+
 - [ ] Export vectoriel SVG/PDF (rendu par tracés, via CairoSVG)
-- [ ] Résolutions HD/4K/8K/16K, DPI configurable, rendu par tuiles
+- [ ] Résolutions HD/4K/8K/16K, DPI configurable, rendu par tuiles (profite de
+      la performance de la Phase 5)
 
-## Phase 5 — Interface & performance
+## Phase 7 — Interface & navigation
 
 - [ ] Interface graphique moderne : édition des paramètres, changement de seed,
       visualisation temps réel, sauvegarde/chargement d'œuvres
 - [ ] Bibliothèque de presets et navigation dans l'espace des génomes
-- [ ] Optimisation : vectorisation poussée, multiprocessing
-- [ ] Accélération GPU (OpenGL/Vulkan/GLSL, Numba/CUDA) sur les points chauds
-      (itération des attracteurs, accumulation, advection de particules)
+
+## Phase 8 — Animation
+
+- [ ] Animation des paramètres, couleurs, particules, équations (keyframes)
+- [ ] **Bruit 3D** (dimension temporelle) pour une animation cohérente des
+      champs de bruit (laissé ouvert en Phase 2+)
+- [ ] **Particules variables dans le temps** : taille et opacité par particule
+      évoluant au fil de la vie (laissé ouvert en Phase 3)
+- [ ] Export temporel : GIF, MP4, séquences PNG
 
 ## Dette technique connue
 
@@ -90,5 +131,7 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
   particles.py`) sont des boucles Python sur les pas (correctes mais limitées à
   quelques centaines de milliers de points par couche) — candidates n°1 au GPU.
   L'interface `Equation.sample` est conçue pour ne pas changer lors de ce portage.
+  Traité en Phase 5.
 - Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
-  de « surface minimale » plus fin est envisageable.
+  de « surface minimale » plus fin est envisageable. Traité en Phase 5 (viabilité
+  affinée).
