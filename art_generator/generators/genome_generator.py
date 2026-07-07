@@ -26,6 +26,7 @@ _POINTS = {
     "fractal": 220_000,
     "vector_field": 240_000,
     "complex": 200_000,
+    "particles": 320_000,
 }
 
 

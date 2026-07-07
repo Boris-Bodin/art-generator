@@ -48,11 +48,25 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
 
   Reste ouvert : bruit 3D pour l'animation temporelle (Phase 4).
 
-## Phase 3 — Système de particules
+## Phase 3 — Système de particules ✅ (livré)
 
-- [ ] Particules avec position, vitesse, couleur, durée de vie, taille, opacité
-- [ ] Passage à l'échelle : centaines de milliers → millions de particules
-- [ ] Émetteurs, forces, turbulence pilotés par le génome
+- [x] **Particules** (`equations/particles.py`) avec position, vitesse, durée de
+      vie et âge ; simulation pas à pas (intégration d'Euler) enregistrant la
+      position de chaque particule à chaque pas → reste dans le modèle unifié
+      « nuage de points », donc rendue par le renderer existant sans modification.
+      La couleur (âge le long de la trajectoire ou vitesse), l'épaisseur et
+      l'opacité proviennent des champs de couche déjà en place (`color_*`,
+      `thickness*`, `opacity`).
+- [x] **Passage à l'échelle** : le nombre de points demandé pilote le nombre de
+      pas (`steps = n // n_particles`) — quelques milliers de particules
+      simultanées suffisent à atteindre le million de points.
+- [x] **Émetteurs** (point, disque, anneau, ligne), **forces** (gravité,
+      attraction/répulsion centrale, tourbillon, traînée) et **turbulence** par
+      bruit *curl* (sans divergence) — tout piloté par le génome ; renaissance
+      des particules mortes à l'émetteur pour un flux continu.
+
+  Reste ouvert : advection GPU (voir dette technique) et taille/opacité par
+  particule variables dans le temps (Phase 4, animation).
 
 ## Phase 4 — Animation & export
 
@@ -72,7 +86,9 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
 
 ## Dette technique connue
 
-- L'itération des attracteurs est une boucle Python (correcte mais limitée à
-  quelques centaines de milliers de points par couche) — candidate n°1 au GPU.
+- L'itération des attracteurs **et l'advection des particules** (`equations/
+  particles.py`) sont des boucles Python sur les pas (correctes mais limitées à
+  quelques centaines de milliers de points par couche) — candidates n°1 au GPU.
+  L'interface `Equation.sample` est conçue pour ne pas changer lors de ce portage.
 - Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
   de « surface minimale » plus fin est envisageable.

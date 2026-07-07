@@ -9,7 +9,15 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from . import attractors, complex_map, fractal, parametric, polar, vector_field
+from . import (
+    attractors,
+    complex_map,
+    fractal,
+    parametric,
+    particles,
+    polar,
+    vector_field,
+)
 from .base import Equation
 
 # famille -> (classe d'équation, fabrique de paramètres depuis un RNG)
@@ -48,3 +56,4 @@ register("attractor", attractors.Attractor, attractors.default_params)
 register("vector_field", vector_field.VectorField, vector_field.default_params)
 register("complex", complex_map.ComplexMap, complex_map.default_params)
 register("fractal", fractal.Fractal, fractal.default_params)
+register("particles", particles.ParticleSystem, particles.default_params)
