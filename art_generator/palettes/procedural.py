@@ -34,20 +34,53 @@ def cosine_palette(t: np.ndarray, palette: PaletteGenome) -> np.ndarray:
     return np.clip(rgb, 0.0, 1.0)
 
 
+def hsv_palette(t: np.ndarray, palette: PaletteGenome) -> np.ndarray:
+    """Palette HSV : la teinte parcourt ``hue`` le long de ``t``.
+
+    Saturation et valeur sont constantes. Conversion HSV→RGB vectorisée.
+    """
+    t = np.asarray(t, dtype=np.float64)
+    h = (palette.hue[0] + t * palette.hue[1]) % 1.0
+    s = np.full_like(h, palette.sat)
+    v = np.full_like(h, palette.val)
+
+    i = np.floor(h * 6.0).astype(np.int64)
+    f = h * 6.0 - i
+    p = v * (1.0 - s)
+    q = v * (1.0 - f * s)
+    tt = v * (1.0 - (1.0 - f) * s)
+    i = i % 6
+
+    r = np.choose(i, [v, q, p, p, tt, v])
+    g = np.choose(i, [tt, v, v, q, p, p])
+    b = np.choose(i, [p, p, tt, v, v, q])
+    return np.clip(np.column_stack((r, g, b)), 0.0, 1.0)
+
+
+def gradient_palette(t: np.ndarray, palette: PaletteGenome) -> np.ndarray:
+    """Dégradé multi-arrêts : interpolation linéaire entre arrêts ``(pos, r, g, b)``."""
+    t = np.asarray(t, dtype=np.float64)
+    stops = sorted(palette.stops, key=lambda s: s[0])
+    pos = np.array([s[0] for s in stops])
+    cols = np.array([s[1:] for s in stops])  # (S, 3)
+    r = np.interp(t, pos, cols[:, 0])
+    g = np.interp(t, pos, cols[:, 1])
+    b = np.interp(t, pos, cols[:, 2])
+    return np.clip(np.column_stack((r, g, b)), 0.0, 1.0)
+
+
 def apply(t: np.ndarray, palette: PaletteGenome) -> np.ndarray:
     """Point d'entrée du moteur : dispatch selon ``palette.mode``."""
     if palette.mode == "cosine":
         return cosine_palette(t, palette)
+    if palette.mode == "hsv":
+        return hsv_palette(t, palette)
+    if palette.mode == "gradient":
+        return gradient_palette(t, palette)
     raise ValueError(f"Mode de palette inconnu : {palette.mode!r}")
 
 
-def random_palette(rng) -> PaletteGenome:
-    """Palette cosinus harmonieuse tirée depuis un RNG.
-
-    ``offset`` et ``amp`` restent dans des plages qui garantissent des couleurs
-    vives sans écrêtage brutal ; les phases décalées entre canaux créent des
-    dégradés riches.
-    """
+def _random_cosine(rng) -> PaletteGenome:
     base_phase = rng.uniform(0.0, 1.0)
     return PaletteGenome(
         mode="cosine",
@@ -60,3 +93,36 @@ def random_palette(rng) -> PaletteGenome:
             base_phase + rng.uniform(0.4, 0.8),
         ),
     )
+
+
+def _random_hsv(rng) -> PaletteGenome:
+    return PaletteGenome(
+        mode="hsv",
+        hue=(rng.uniform(0.0, 1.0), rng.uniform(0.2, 0.9)),
+        sat=rng.uniform(0.55, 0.95),
+        val=rng.uniform(0.85, 1.0),
+    )
+
+
+def _random_gradient(rng) -> PaletteGenome:
+    """Dégradé dont les arrêts sont échantillonnés sur une palette cosinus.
+
+    Ancrer les couleurs sur un cosinus conserve la parenté chromatique de famille.
+    """
+    base = _random_cosine(rng)
+    n_stops = rng.randint(3, 5)
+    positions = sorted(rng.uniform(0.0, 1.0) for _ in range(n_stops))
+    positions[0], positions[-1] = 0.0, 1.0
+    sampled = cosine_palette(np.array(positions), base)
+    stops = [[positions[i], *sampled[i].tolist()] for i in range(len(positions))]
+    return PaletteGenome(mode="gradient", stops=stops)
+
+
+def random_palette(rng) -> PaletteGenome:
+    """Palette harmonieuse : cosinus (dominant), HSV ou dégradé multi-arrêts."""
+    mode = rng.choice(["cosine", "hsv", "gradient"], weights=[0.6, 0.22, 0.18])
+    if mode == "cosine":
+        return _random_cosine(rng)
+    if mode == "hsv":
+        return _random_hsv(rng)
+    return _random_gradient(rng)

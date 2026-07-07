@@ -25,11 +25,18 @@ class PaletteGenome:
     même famille une parenté chromatique reconnaissable.
     """
 
-    mode: str = "cosine"
+    mode: str = "cosine"  # cosine | hsv | gradient
+    # --- mode cosinus ---
     offset: tuple[float, float, float] = (0.5, 0.5, 0.5)
     amp: tuple[float, float, float] = (0.5, 0.5, 0.5)
     freq: tuple[float, float, float] = (1.0, 1.0, 1.0)
     phase: tuple[float, float, float] = (0.0, 0.33, 0.67)
+    # --- mode HSV (teinte parcourue le long de t) ---
+    hue: tuple[float, float] = (0.0, 1.0)  # (départ, amplitude)
+    sat: float = 0.7
+    val: float = 1.0
+    # --- mode dégradé multi-arrêts : liste d'arrêts (position, r, g, b) ---
+    stops: list | None = None
 
 
 @dataclass
@@ -57,6 +64,13 @@ class LayerGenome:
 
     symmetry: str = "none"  # none | mirror | radial | kaleidoscope
     symmetry_order: int = 6
+
+    # --- déformation par bruit (Phase 2) ---
+    noise_type: str = "none"  # none | perlin | fbm | worley
+    warp: float = 0.0  # amplitude de déformation du domaine (coordonnées)
+    warp_freq: float = 1.5  # fréquence spatiale du bruit de warp
+    color_noise: float = 0.0  # modulation des valeurs de coloration par le bruit
+    noise_seed: int = 0
 
 
 @dataclass

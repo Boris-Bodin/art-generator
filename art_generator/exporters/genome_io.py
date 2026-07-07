@@ -20,13 +20,12 @@ def to_dict(genome: ArtworkGenome) -> dict[str, Any]:
 
 
 def _palette_from_dict(d: dict[str, Any]) -> PaletteGenome:
-    return PaletteGenome(
-        mode=d["mode"],
-        offset=tuple(d["offset"]),
-        amp=tuple(d["amp"]),
-        freq=tuple(d["freq"]),
-        phase=tuple(d["phase"]),
-    )
+    # Le JSON transforme les tuples en listes : on rétablit les tuples attendus.
+    d = dict(d)
+    for key in ("offset", "amp", "freq", "phase", "hue"):
+        if d.get(key) is not None:
+            d[key] = tuple(d[key])
+    return PaletteGenome(**d)
 
 
 def _layer_from_dict(d: dict[str, Any]) -> LayerGenome:

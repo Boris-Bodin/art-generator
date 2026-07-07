@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from typing import Any, Callable
 
-from . import attractors, parametric, polar
+from . import attractors, complex_map, fractal, parametric, polar, vector_field
 from .base import Equation
 
 # famille -> (classe d'équation, fabrique de paramètres depuis un RNG)
@@ -45,3 +45,6 @@ def random_params(family: str, rng) -> dict[str, Any]:
 register("parametric", parametric.ParametricCurve, parametric.default_params)
 register("polar", polar.PolarCurve, polar.default_params)
 register("attractor", attractors.Attractor, attractors.default_params)
+register("vector_field", vector_field.VectorField, vector_field.default_params)
+register("complex", complex_map.ComplexMap, complex_map.default_params)
+register("fractal", fractal.Fractal, fractal.default_params)

@@ -66,12 +66,16 @@ python -m art_generator.examples.generate_gallery --seeds 1-16 --tile 400
 art_generator/
 ├── core/         # génome, RNG déterministe, moteur, fond, modes de fusion
 ├── equations/    # familles d'équations (registre extensible)
-│   ├── parametric.py   courbes paramétriques harmoniques
-│   ├── polar.py        roses, rosaces, spirales
-│   └── attractors.py   Clifford, de Jong, attracteurs personnalisés
+│   ├── parametric.py     courbes paramétriques harmoniques
+│   ├── polar.py          roses, rosaces, spirales
+│   ├── attractors.py     Clifford, de Jong, attracteurs personnalisés
+│   ├── vector_field.py   champs de vecteurs (advection de particules)
+│   ├── complex_map.py    transformations conformes du plan complexe
+│   └── fractal.py        Mandelbrot / Julia en Buddhabrot (orbites)
+├── noise/        # bruits procéduraux : Perlin, fBm, Worley (warp & couleur)
 ├── generators/   # génération + contrôle de viabilité d'un génome
-├── palettes/     # palettes procédurales (gradient cosinus)
-├── renderers/    # accumulation lumineuse + symétries
+├── palettes/     # palettes procédurales (cosinus, HSV, dégradés multi-arrêts)
+├── renderers/    # accumulation lumineuse + symétries + déformation par bruit
 ├── exporters/    # export image + sérialisation JSON du génome
 ├── utils/        # cadrage robuste, nettoyage des singularités
 ├── presets/      # génomes de référence

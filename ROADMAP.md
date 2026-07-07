@@ -18,15 +18,22 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
 - [x] Export PNG/TIFF, CLI, planche-contact
 - [x] Suite de tests (déterminisme, round-trip, viabilité)
 
-## Phase 2 — Richesse du langage
+## Phase 2 — Richesse du langage ✅ (livré)
 
-- [ ] **Bruit** : Perlin, Simplex, Worley + bruit personnalisé, appliqué aux
-      coordonnées, couleurs, épaisseurs et à la lumière
-- [ ] **Champs de vecteurs** : `dx/dt = f(x,y)`, `dy/dt = g(x,y)` avec advection
-      de particules (nouvelle famille dans le registre)
-- [ ] **Domaines complexes** : itérations et transformations sur `C`
-- [ ] **Fractales** : Mandelbrot / Julia (architecture prête, non central)
-- [ ] Palettes HSL/HSV, dégradés multi-arrêts, palettes procédurales avancées
+- [x] **Bruit** (`noise/fields.py`) : Perlin, fBm (somme fractale), Worley,
+      appliqué en déformation du domaine (warp) et en modulation des couleurs
+      via les champs `noise_type`/`warp`/`warp_freq`/`color_noise` de la couche
+- [x] **Champs de vecteurs** (`equations/vector_field.py`) : `dx/dt = f(x,y)`,
+      `dy/dt = g(x,y)` avec advection de particules le long des lignes de courant
+- [x] **Domaines complexes** (`equations/complex_map.py`) : transformations
+      conformes `w = f(z)` itérées (poly / sinus / rationnelle de type Möbius)
+- [x] **Fractales** (`equations/fractal.py`) : Mandelbrot & Julia rendus en
+      **Buddhabrot** (accumulation d'orbites) pour rester dans le modèle nuage de
+      points ; famille parmi d'autres, non centrale
+- [x] Palettes **HSV** et **dégradés multi-arrêts** (`palettes/procedural.py`)
+
+  Reste à faire en Phase 2+ : bruit **Simplex** proprement dit (aujourd'hui
+  approché par fBm) ; bruit modulant aussi épaisseur et lumière ; palettes HSL.
 
 ## Phase 3 — Système de particules
 

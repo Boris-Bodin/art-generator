@@ -13,6 +13,7 @@ from PIL import Image, ImageFilter
 
 from ..core.genome import LayerGenome
 from ..equations.base import Equation
+from ..noise import fields as noise
 from ..palettes import procedural
 from ..utils.math_utils import clean_points, fit_to_canvas
 from .symmetry import apply_symmetry
@@ -31,6 +32,31 @@ def _kernel_offsets(thickness: float) -> list[tuple[int, int]]:
     return offsets
 
 
+def _apply_noise(
+    points: np.ndarray, values: np.ndarray, layer: LayerGenome
+) -> tuple[np.ndarray, np.ndarray]:
+    """Déforme le domaine (warp) et/ou module les valeurs de coloration par bruit.
+
+    Le bruit est échantillonné aux positions des points (mises à l'échelle par
+    ``warp_freq``) ; deux seeds décorrélées donnent des déplacements ``x``/``y``
+    indépendants. Reproductible via ``layer.noise_seed``.
+    """
+    kind = layer.noise_type
+    fx = points[:, 0] * layer.warp_freq
+    fy = points[:, 1] * layer.warp_freq
+
+    if layer.warp > 0:
+        nx = noise.sample(kind, fx, fy, layer.noise_seed)
+        ny = noise.sample(kind, fx + 37.1, fy + 17.9, layer.noise_seed + 7919)
+        points = points + layer.warp * np.column_stack((nx, ny))
+
+    if layer.color_noise > 0:
+        nc = noise.sample(kind, fx * 0.5, fy * 0.5, layer.noise_seed + 104729)
+        values = np.clip(values + layer.color_noise * nc, 0.0, 1.0)
+
+    return points, values
+
+
 def render_layer(
     equation: Equation, layer: LayerGenome, width: int, height: int
 ) -> np.ndarray:
@@ -44,6 +70,10 @@ def render_layer(
     center = np.median(points, axis=0)
     points = points - center
     points, values = apply_symmetry(points, values, layer.symmetry, layer.symmetry_order)
+
+    # Déformation du domaine et/ou modulation couleur par bruit (Phase 2).
+    if layer.noise_type != "none":
+        points, values = _apply_noise(points, values, layer)
 
     coords, inside = fit_to_canvas(points, width, height)
     if len(coords) == 0:

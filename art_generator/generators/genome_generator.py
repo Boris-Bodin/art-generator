@@ -18,16 +18,52 @@ from . import quality
 _SYMMETRIES = ["none", "mirror", "radial", "kaleidoscope"]
 
 
+_NOISE_TYPES = ["perlin", "fbm", "worley"]
+
+# densité de points indicative par famille
+_POINTS = {
+    "attractor": 260_000,
+    "fractal": 220_000,
+    "vector_field": 240_000,
+    "complex": 200_000,
+}
+
+
+def _base_points(family: str) -> int:
+    return _POINTS.get(family, 180_000)
+
+
 def _related_palette(base: PaletteGenome, rng: RNG) -> PaletteGenome:
-    """Palette apparentée à ``base`` (phases décalées) pour cohérence de couches."""
+    """Palette apparentée à ``base`` pour la cohérence entre couches.
+
+    Le décalage dépend du mode : phase pour le cosinus, teinte pour le HSV ; le
+    mode dégradé est repris tel quel (ses arrêts encodent déjà la couleur).
+    """
     shift = rng.uniform(0.05, 0.2)
-    return PaletteGenome(
-        mode=base.mode,
-        offset=base.offset,
-        amp=base.amp,
-        freq=base.freq,
-        phase=tuple(p + shift for p in base.phase),
-    )
+    if base.mode == "cosine":
+        return PaletteGenome(
+            mode="cosine", offset=base.offset, amp=base.amp, freq=base.freq,
+            phase=tuple(p + shift for p in base.phase),
+        )
+    if base.mode == "hsv":
+        return PaletteGenome(
+            mode="hsv", hue=((base.hue[0] + shift) % 1.0, base.hue[1]),
+            sat=base.sat, val=base.val,
+        )
+    return base
+
+
+def _noise_settings(rng: RNG) -> dict:
+    """Réglages de bruit d'une couche : warp du domaine + modulation couleur."""
+    if not rng.chance(0.4):
+        return {"noise_type": "none"}
+    return {
+        "noise_type": rng.choice(_NOISE_TYPES),
+        "warp": rng.uniform(0.05, 0.3),
+        "warp_freq": rng.uniform(0.6, 3.0),
+        "color_noise": rng.uniform(0.0, 0.3) if rng.chance(0.5) else 0.0,
+        "noise_seed": rng.randint(0, 2**31 - 1),
+    }
 
 
 def generate(
@@ -45,9 +81,6 @@ def generate(
     symmetry = rng.choice(_SYMMETRIES, weights=[0.4, 0.2, 0.25, 0.15])
     symmetry_order = rng.randint(3, 8)
 
-    # densité de points selon la famille (les attracteurs aiment la densité)
-    base_points = 260_000 if family == "attractor" else 180_000
-
     layers: list[LayerGenome] = []
     for i in range(n_layers):
         layer_family = family if i == 0 else rng.choice(registry.families())
@@ -56,7 +89,7 @@ def generate(
             LayerGenome(
                 equation_family=layer_family,
                 equation_params=quality.viable_params(layer_family, rng),
-                n_points=int(base_points * rng.uniform(0.7, 1.1)),
+                n_points=int(_base_points(layer_family) * rng.uniform(0.7, 1.1)),
                 palette=palette,
                 color_by="velocity" if layer_family == "attractor" else "t",
                 blend_mode="add" if i == 0 else rng.choice(["add", "screen"]),
@@ -66,6 +99,7 @@ def generate(
                 exposure=rng.uniform(0.8, 1.6),
                 symmetry=symmetry if i == 0 else rng.choice(["none", symmetry]),
                 symmetry_order=symmetry_order,
+                **_noise_settings(rng),
             )
         )
 
