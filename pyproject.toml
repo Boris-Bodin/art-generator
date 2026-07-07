@@ -9,10 +9,19 @@ dependencies = [
     "pillow>=10.0",
 ]
 
+[project.optional-dependencies]
+dev = ["pytest>=8.0"]
+
 [project.scripts]
 art-generator = "art_generator.main:main"
 
 [build-system]
 requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+include = ["art_generator*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
 
