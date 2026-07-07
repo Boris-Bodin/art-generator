@@ -40,9 +40,13 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
       **l'épaisseur** (rayon de trait par point) — champs `light_noise` et
       `thickness_noise` de la couche, appliqués dans l'accumulation
 - [x] Palettes **HSL** (`palettes/procedural.py::hsl_palette`)
+- [x] **Contraintes d'harmonie** (`harmonic_palette`) : schémas de la roue
+      chromatique (monochrome, analogue, complémentaire, split-complémentaire,
+      triadique, tétradique) — harmonie garantie par construction
+- [x] **Palettes nommées** (`NAMED_PALETTES` : nebula, ember, aurora, bio,
+      ocean, sunset) pour une direction artistique reconnaissable
 
-  Reste ouvert : palettes procédurales encore plus riches (palettes nommées,
-  contraintes d'harmonie), bruit 3D pour l'animation temporelle.
+  Reste ouvert : bruit 3D pour l'animation temporelle (Phase 4).
 
 ## Phase 3 — Système de particules
 

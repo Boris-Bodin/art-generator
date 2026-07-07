@@ -25,7 +25,8 @@ class PaletteGenome:
     même famille une parenté chromatique reconnaissable.
     """
 
-    mode: str = "cosine"  # cosine | hsv | gradient
+    mode: str = "cosine"  # cosine | hsv | hsl | gradient
+    name: str = ""  # nom de palette / schéma d'harmonie (traçabilité, facultatif)
     # --- mode cosinus ---
     offset: tuple[float, float, float] = (0.5, 0.5, 0.5)
     amp: tuple[float, float, float] = (0.5, 0.5, 0.5)
