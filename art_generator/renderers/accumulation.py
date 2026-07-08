@@ -73,6 +73,11 @@ def _disk_offsets(radius: int) -> list[tuple[int, int, int]]:
     return offsets
 
 
+def _disk_area(radius: int) -> int:
+    """Nombre de pixels d'un disque de rayon ``radius`` (au moins 1)."""
+    return len(_disk_offsets(int(radius)))
+
+
 def _point_modulation(
     points: np.ndarray, layer: LayerGenome, stroke_scale: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -84,13 +89,20 @@ def _point_modulation(
 
     ``stroke_scale`` (Phase 5) épaissit les traits proportionnellement à la
     résolution pour les familles filamentaires (voir :func:`_stroke_scale`) ;
-    il vaut 1 pour les familles nuage (traits fins et nets). À 1, calcul
-    identique à l'historique.
+    il vaut 1 pour les familles nuage (traits fins et nets). Le poids est alors
+    **normalisé par l'aire du disque** (facteur ``aire(rayon réf)/aire(rayon
+    courant)``) : élargir le trait le *répartit* sans l'éclaircir/assombrir
+    davantage, pour que la densité visuelle reste celle de la référence. À
+    ``stroke_scale == 1`` le facteur vaut 1 : calcul identique à l'historique.
     """
     n = len(points)
     max_radius = int(round(_MAX_RADIUS * stroke_scale))
     base_radius = max(0, int(round(layer.thickness * stroke_scale)) - 1)
-    weight = np.ones(n, dtype=np.float64)
+    # Normalisation d'aire : rapport entre le disque à stroke_scale=1 et le disque
+    # élargi. Vaut 1 quand stroke_scale=1 (rayons égaux) -> invariant préservé.
+    ref_radius = max(0, int(round(layer.thickness)) - 1)
+    area_norm = _disk_area(ref_radius) / _disk_area(base_radius)
+    weight = np.full(n, area_norm, dtype=np.float64)
     radius = np.full(n, base_radius, dtype=np.int64)
 
     if layer.noise_type == "none" or (
@@ -103,7 +115,7 @@ def _point_modulation(
     u = 0.5 * (noise.sample(layer.noise_type, fx + 5.3, fy + 9.1, layer.noise_seed + 555) + 1.0)
 
     if layer.light_noise > 0:
-        weight = np.clip(1.0 - layer.light_noise + 2.0 * layer.light_noise * u, 0.05, 4.0)
+        weight = area_norm * np.clip(1.0 - layer.light_noise + 2.0 * layer.light_noise * u, 0.05, 4.0)
     if layer.thickness_noise > 0:
         r = np.round((layer.thickness + layer.thickness_noise * u) * stroke_scale).astype(np.int64) - 1
         radius = np.clip(r, 0, max_radius)

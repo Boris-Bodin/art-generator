@@ -145,6 +145,22 @@ def test_point_count_scales_by_support_dimension():
     assert _point_count("attractor", 1234, 1.0) == 1234
 
 
+def test_stroke_area_normalization_keeps_light_constant():
+    from art_generator.core.genome import LayerGenome
+    from art_generator.renderers.accumulation import _disk_area, _point_modulation
+    pts = np.zeros((10, 2))
+    layer = LayerGenome(thickness=1.0, noise_type="none")
+    # stroke_scale=1 : poids unitaire (invariant préservé).
+    w1, r1 = _point_modulation(pts, layer, 1.0)
+    assert np.allclose(w1, 1.0) and np.all(r1 == 0)
+    # stroke_scale>1 : le disque s'élargit, le poids baisse d'autant (lumière
+    # totale par point ~constante), sans dépasser la référence.
+    w3, r3 = _point_modulation(pts, layer, 3.0)
+    assert np.all(r3 > r1[0])                       # trait plus large
+    assert np.allclose(w3, 1.0 / _disk_area(int(r3[0])))
+    assert w3[0] < 1.0
+
+
 def test_stroke_scale_is_per_family():
     from art_generator.renderers.accumulation import _stroke_scale
     # Familles filamentaires : épaisseur/glow suivent la résolution.

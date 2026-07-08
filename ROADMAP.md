@@ -125,8 +125,10 @@ l'export vectoriel réutilise le même nuage de points projeté.
       réseau de lignes 1D ne se comportent pas pareil, l'épaisseur et le glow ne
       sont mis à l'échelle **que pour les familles filamentaires** (vector_field,
       parametric, polar, complex — `accumulation._stroke_scale`), afin de
-      préserver la densité du voile de lignes ; les familles nuage (attractor,
-      particles, fractal) gardent des traits fins et nets. Le **support 1D pur**
+      préserver la densité du voile de lignes ; le poids est alors **normalisé
+      par l'aire du disque** (`accumulation._point_modulation`) pour que le trait
+      s'*élargisse sans s'alourdir* (densité visuelle constante). Les familles
+      nuage (attractor, particles, fractal) gardent des traits fins et nets. Le **support 1D pur**
       (vector_field) fait croître ses points linéairement plutôt qu'avec l'aire
       (`accumulation._point_factor`). Enfin, les familles à **trajectoires
       intégrées** (vector_field, particles) préservent leur **durée intégrée**
