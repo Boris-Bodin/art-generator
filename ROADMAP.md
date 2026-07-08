@@ -146,11 +146,38 @@ l'export vectoriel réutilise le même nuage de points projeté.
       d'où l'identité pixel-à-pixel avec le chemin simple. Le fond est lui aussi
       calculé par bandes (`core/background.py`).
 
-## Phase 6 — Interface & navigation
+## Phase 6 — Interface & navigation ✅ (livré)
 
-- [ ] Interface graphique moderne : édition des paramètres, changement de seed,
-      visualisation temps réel, sauvegarde/chargement d'œuvres
-- [ ] Bibliothèque de presets et navigation dans l'espace des génomes
+Cette phase donne un **atelier interactif** au moteur sans toucher aux invariants :
+la logique (aperçu, navigation, presets) vit dans des modules **sans toolkit**,
+donc testables sans écran ; la *vue* Tkinter ne fait que les câbler. Choix de
+Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
+(matplotlib/numpy/pillow) — **aucune dépendance nouvelle**.
+
+- [x] **Interface graphique** (`ui/app.py`, commande `art-generator ui`) : trois
+      colonnes — réglages globaux (seed, presets, fichier, fond) · aperçu · éditeur
+      de couche. Édition en direct de tous les champs du génome (famille d'équation,
+      fusion, médium light/ink, opacité, glow, exposition, épaisseur, symétrie,
+      bruit, palette), changement de seed (précédent/suivant/aléatoire), et
+      **sauvegarde/chargement** (JSON de génome, export image pleine résolution).
+- [x] **Aperçu « temps réel »** (`ui/preview.py`, logique pure) : profite de
+      l'indépendance à la résolution (rendu **fidèle** à petite taille, ≈ 560 px,
+      cf. Phase 5) ; rendu **débouncé** et **hors thread principal** (Tk n'est pas
+      thread-safe : résultat renvoyé par une file, sondée par `after`, stratégie
+      « le dernier gagne »). Mode **brouillon** (`point_cap`) plafonnant les points
+      pour un retour plus vif pendant l'édition ; l'export final garde le génome
+      complet.
+- [x] **Bibliothèque de presets** (`presets/library.py`) : catalogue **intégré**
+      de seeds curées et nommées (une seed suffit — une œuvre = un génome) + presets
+      **utilisateur** (génomes arbitraires édités à la main, enregistrés en JSON).
+- [x] **Navigation dans l'espace des génomes** (`generators/navigation.py`) :
+      `mutate` — un *petit pas* déterministe vers un voisin (perturbation douce des
+      champs visuels, la **forme** `equation_params` restant intacte → viabilité
+      préservée, jamais d'image noire) ; `reroll_equations` — un *saut* re-tirant
+      des formes **viables** en gardant la mise en scène.
+
+  Reste ouvert : rendu réellement temps réel (GPU, Phase 7) pour les familles
+  coûteuses (attracteurs, particules).
 
 ## Phase 7 — Performance
 
@@ -176,7 +203,7 @@ l'export vectoriel réutilise le même nuage de points projeté.
   particles.py`) sont des boucles Python sur les pas (correctes mais limitées à
   quelques centaines de milliers de points par couche) — candidates n°1 au GPU.
   L'interface `Equation.sample` est conçue pour ne pas changer lors de ce portage.
-  Traité en Phase 6.
+  À traiter en Phase 7.
 - Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
-  de « surface minimale » plus fin est envisageable. Traité en Phase 6 (viabilité
-  affinée).
+  de « surface minimale » plus fin est envisageable. À traiter en Phase 7
+  (viabilité affinée).

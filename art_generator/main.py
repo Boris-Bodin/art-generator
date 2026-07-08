@@ -9,6 +9,7 @@ Exemples :
     art-generator batch -n 8 --out outputs  # plusieurs œuvres
     art-generator render outputs/genome_42.json --preset 16k    # re-rendu 16K (tuiles auto)
     art-generator render outputs/genome_42.json --out oeuvre.pdf
+    art-generator ui --seed 42              # éditeur graphique, aperçu temps réel
 """
 
 from __future__ import annotations
@@ -81,6 +82,12 @@ def _cmd_batch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_ui(args: argparse.Namespace) -> int:
+    from .ui.app import launch  # import paresseux (Tkinter)
+
+    return launch(seed=args.seed)
+
+
 def _cmd_render(args: argparse.Namespace) -> int:
     genome = genome_io.load(args.genome)
     # Ré-cadrage optionnel à une autre résolution (préréglage ou taille).
@@ -144,6 +151,10 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--out", default=None)
     _add_resolution_args(r, default_size=None)
     r.set_defaults(func=_cmd_render)
+
+    u = sub.add_parser("ui", help="Ouvrir l'éditeur graphique (aperçu temps réel).")
+    u.add_argument("--seed", type=int, default=None, help="Seed de départ (aléatoire si omise).")
+    u.set_defaults(func=_cmd_ui)
 
     return parser
 
