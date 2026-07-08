@@ -44,7 +44,7 @@ def hsv_palette(t: np.ndarray, palette: PaletteGenome) -> np.ndarray:
     s = np.full_like(h, palette.sat)
     v = np.full_like(h, palette.val)
 
-    i = np.floor(h * 6.0).astype(np.int64)
+    i = np.floor(h * 6.0).astype(np.int32)
     f = h * 6.0 - i
     p = v * (1.0 - s)
     q = v * (1.0 - f * s)
@@ -72,7 +72,7 @@ def hsl_to_rgb(h, s, l) -> np.ndarray:
     m = l - c / 2.0
 
     z = np.zeros_like(h)
-    seg = np.floor(hp).astype(np.int64) % 6
+    seg = np.floor(hp).astype(np.int32) % 6
     r = np.choose(seg, [c, x, z, z, x, c]) + m
     g = np.choose(seg, [x, c, c, x, z, z]) + m
     b = np.choose(seg, [z, z, x, c, c, x]) + m
