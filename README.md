@@ -24,7 +24,8 @@ python -m venv .venv
 pip install -e ".[dev]"
 ```
 
-Dépendances : Python 3.12+, NumPy, Pillow (Matplotlib pour le prototypage).
+Dépendances : Python 3.12+, NumPy, Pillow, Matplotlib (export vectoriel SVG/PDF).
+L'éditeur graphique utilise Tkinter (bibliothèque standard, aucune installation).
 
 ## Utilisation
 
@@ -34,11 +35,18 @@ Dépendances : Python 3.12+, NumPy, Pillow (Matplotlib pour le prototypage).
 # Une œuvre depuis une seed (aléatoire si omise)
 art-generator gen --seed 42 --size 1600 --out outputs
 
+# Résolutions HD/4K/8K/16K, ratio et format (PNG/TIFF/JPG, SVG/PDF vectoriel)
+art-generator gen --seed 42 --preset 4k --ratio 16:9
+art-generator gen --seed 42 --preset 8k --format svg
+
 # Un lot d'œuvres
 art-generator batch -n 8 --out outputs
 
-# Re-rendre une œuvre depuis son génome JSON
-art-generator render outputs/genome_42.json
+# Re-rendre une œuvre depuis son génome JSON (tuiles auto pour les très grandes tailles)
+art-generator render outputs/genome_42.json --preset 16k
+
+# Éditeur graphique : aperçu temps réel, presets, navigation, sauvegarde/chargement
+art-generator ui --seed 42
 ```
 
 ### API Python
@@ -53,6 +61,28 @@ image.save("oeuvre.png")
 genome = ag.generate(seed=42, width=2000, height=2000)
 image = ag.Engine().render(genome)
 ```
+
+### Éditeur graphique
+
+```bash
+art-generator ui            # ou : art-generator ui --seed 42
+```
+
+Un atelier interactif (Tkinter, aucune dépendance supplémentaire) en trois
+colonnes :
+
+- **Réglages globaux** — changement de seed (précédent/suivant/aléatoire),
+  bibliothèque de presets, ouverture/enregistrement JSON, export image pleine
+  résolution, fond.
+- **Aperçu temps réel** — rendu réduit *fidèle* à l'œuvre finale (grâce à
+  l'indépendance à la résolution), calculé hors du thread principal et débouncé
+  pour rester fluide pendant l'édition.
+- **Éditeur de couche** — famille d'équation, mode de fusion, médium
+  (light/ink), opacité, glow, exposition, épaisseur, symétrie, bruit, palette.
+
+Deux mouvements de **navigation dans l'espace des génomes** : *Muter* (petit pas
+vers un voisin, la forme est préservée) et *Re-tirer les formes* (nouvelles
+formes viables, même mise en scène).
 
 ### Planche-contact
 
@@ -71,14 +101,16 @@ art_generator/
 │   ├── attractors.py     Clifford, de Jong, attracteurs personnalisés
 │   ├── vector_field.py   champs de vecteurs (advection de particules)
 │   ├── complex_map.py    transformations conformes du plan complexe
-│   └── fractal.py        Mandelbrot / Julia en Buddhabrot (orbites)
-├── noise/        # bruits procéduraux : Perlin, fBm, Worley (warp & couleur)
-├── generators/   # génération + contrôle de viabilité d'un génome
-├── palettes/     # palettes procédurales (cosinus, HSV, dégradés multi-arrêts)
+│   ├── fractal.py        Mandelbrot / Julia en Buddhabrot (orbites)
+│   └── particles.py      systèmes de particules (émetteurs, forces, curl)
+├── noise/        # bruits procéduraux : Perlin, Simplex, fBm, Worley (warp & couleur)
+├── generators/   # génération + viabilité + navigation dans l'espace des génomes
+├── palettes/     # palettes procédurales (cosinus, HSV/HSL, harmonies, dégradés)
 ├── renderers/    # accumulation lumineuse + symétries + déformation par bruit
-├── exporters/    # export image + sérialisation JSON du génome
+├── exporters/    # export image/vectoriel (SVG/PDF) + sérialisation JSON du génome
 ├── utils/        # cadrage robuste, nettoyage des singularités
-├── presets/      # génomes de référence
+├── presets/      # bibliothèque de presets (seeds curées + presets utilisateur)
+├── ui/           # éditeur graphique Tkinter + aperçu (logique sans toolkit)
 └── examples/     # scripts de démonstration
 ```
 
@@ -95,6 +127,8 @@ Ces deux garanties sont couvertes par la suite de tests (`pytest`).
 
 ## Feuille de route
 
-Voir [ROADMAP.md](ROADMAP.md) : bruit (Perlin/Simplex/Worley), champs de
-vecteurs, domaines complexes, fractales, animation (GIF/MP4), export vectoriel
-(SVG/PDF), interface graphique temps réel, accélération GPU.
+Voir [ROADMAP.md](ROADMAP.md). **Livré** : bruit (Perlin/Simplex/fBm/Worley),
+champs de vecteurs, domaines complexes, fractales, particules, composition par
+alpha & encre, export vectoriel (SVG/PDF), résolutions HD→16K par tuiles,
+interface graphique & navigation. **À venir** : performance & accélération GPU
+(Phase 7), animation et export temporel GIF/MP4 (Phase 8).
