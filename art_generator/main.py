@@ -27,7 +27,7 @@ _VECTOR_SUFFIXES = {".svg", ".pdf"}
 def _dimensions(args: argparse.Namespace, default_size: int) -> tuple[int, int]:
     """Traduit les options de résolution en ``(width, height)`` pixels."""
     preset = getattr(args, "preset", None)
-    ratio = getattr(args, "ratio", "1:1")
+    ratio = getattr(args, "ratio", None)
     size = getattr(args, "size", None)
     if preset is None and size is None:
         size = default_size
@@ -100,7 +100,10 @@ def _add_resolution_args(parser: argparse.ArgumentParser, default_size: int | No
         help="Préréglage de résolution (grand côté). Prioritaire sur --size.",
     )
     parser.add_argument(
-        "--ratio", default="1:1", help="Rapport d'aspect, ex. 16:9, 3:2, 4:5 (défaut 1:1)."
+        "--ratio",
+        default=None,
+        help="Rapport d'aspect, ex. 16:9, 3:2, 4:5. Prime sur le ratio du préréglage ; "
+        "défaut : ratio du préréglage sinon 1:1.",
     )
     parser.add_argument(
         "--size", type=int, default=default_size, help="Côté de l'image carrée en pixels."

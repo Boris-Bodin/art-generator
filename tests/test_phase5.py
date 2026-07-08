@@ -53,6 +53,15 @@ def test_all_presets_resolve():
         assert w >= h > 0
 
 
+def test_preset_carries_its_own_ratio():
+    # displate impose son format portrait (1:1.4) sans --ratio explicite.
+    assert resolve_dimensions("displate") == (4000, 5600)
+    # un --ratio explicite prime sur le ratio du préréglage.
+    assert resolve_dimensions("displate", "16:9") == (5600, 3150)
+    # un préréglage sans ratio propre reste carré par défaut.
+    assert resolve_dimensions("4k") == (3840, 3840)
+
+
 # --- 5b : rendu par tuiles ---------------------------------------------------
 
 def _small_genome(seed=777, w=300, h=300):

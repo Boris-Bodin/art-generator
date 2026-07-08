@@ -115,7 +115,8 @@ l'export vectoriel réutilise le même nuage de points projeté.
 - [x] **Résolutions HD/4K/8K/16K, ratio & DPI configurables** (`exporters/
       resolution.py`, options CLI `--preset`/`--ratio`/`--size`/`--dpi`) : le
       grand côté suit le préréglage, le rapport d'aspect façonne les deux
-      dimensions.
+      dimensions. Un préréglage peut porter son **propre ratio** (format
+      d'impression *displate* → 4000×5600) ; un `--ratio` explicite prime.
 - [x] **Rendu par tuiles** (`core/engine.py::_render_tiled`) : au-delà de 4096 px
       (ou sur `--tile`), l'image est composée **bande par bande** pour borner la
       mémoire (un tampon HDR 16K en float64 pèse plusieurs Go par couche). Chaque
@@ -125,7 +126,13 @@ l'export vectoriel réutilise le même nuage de points projeté.
       d'où l'identité pixel-à-pixel avec le chemin simple. Le fond est lui aussi
       calculé par bandes (`core/background.py`).
 
-## Phase 6 — Performance
+## Phase 6 — Interface & navigation
+
+- [ ] Interface graphique moderne : édition des paramètres, changement de seed,
+      visualisation temps réel, sauvegarde/chargement d'œuvres
+- [ ] Bibliothèque de presets et navigation dans l'espace des génomes
+
+## Phase 7 — Performance
 
 - [ ] Optimisation : vectorisation poussée, multiprocessing
 - [ ] Accélération GPU (OpenGL/Vulkan/GLSL, Numba/CUDA) sur les points chauds
@@ -133,12 +140,6 @@ l'export vectoriel réutilise le même nuage de points projeté.
 - [ ] **Viabilité affinée** : critère de « surface minimale » plus fin pour
       rejeter les formes quasi 1D que le contrôle actuel laisse passer
       (`generators/quality.py`).
-
-## Phase 7 — Interface & navigation
-
-- [ ] Interface graphique moderne : édition des paramètres, changement de seed,
-      visualisation temps réel, sauvegarde/chargement d'œuvres
-- [ ] Bibliothèque de presets et navigation dans l'espace des génomes
 
 ## Phase 8 — Animation
 
