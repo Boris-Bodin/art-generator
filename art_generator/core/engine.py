@@ -40,6 +40,27 @@ _HALO = 32
 # gardent des traits fins et nets.
 _REFERENCE_EDGE = 1600
 
+# Familles où le nombre de lignes de courant / particules est un paramètre fixe
+# (``n_particles``), la densité de points ne pilotant que la *longueur* des
+# trajectoires (``steps = n // n_particles``). En montant en résolution, sans
+# rien faire, on ne ferait que rallonger les trajectoires — les creux (p. ex. le
+# centre) resteraient clairs. On fait donc croître ``n_particles`` linéairement
+# avec la résolution : plus de lignes remplissent les creux, tandis que la
+# longueur des trajectoires suit aussi la résolution.
+_PARTICLE_FAMILIES = frozenset({"vector_field", "particles"})
+
+
+def _build_equation(family: str, params: dict, scale: float):
+    """Construit l'équation d'une couche, en adaptant à la résolution le nombre
+    de lignes/particules des familles concernées (voir :data:`_PARTICLE_FAMILIES`).
+
+    À ``scale == 1`` les paramètres sont inchangés : rendu identique à l'historique.
+    """
+    if scale != 1.0 and family in _PARTICLE_FAMILIES and "n_particles" in params:
+        params = dict(params)
+        params["n_particles"] = max(1, int(round(params["n_particles"] * scale)))
+    return registry.build(family, params)
+
 
 class Engine:
     """Reconstruit une œuvre à partir de son :class:`ArtworkGenome`."""
@@ -64,7 +85,7 @@ class Engine:
         scale = self._scale(genome)
 
         for layer in genome.layers:
-            equation = registry.build(layer.equation_family, layer.equation_params)
+            equation = _build_equation(layer.equation_family, layer.equation_params, scale)
             color, alpha = accumulation.render_layer(
                 equation, layer, genome.width, genome.height, scale
             )
@@ -94,7 +115,7 @@ class Engine:
 
         prepared = []  # (layer, coords, colors, weight, radius, hi)
         for layer in genome.layers:
-            equation = registry.build(layer.equation_family, layer.equation_params)
+            equation = _build_equation(layer.equation_family, layer.equation_params, scale)
             coords, colors, weight, radius = accumulation.project_layer(equation, layer, w, h, scale)
             if len(coords) == 0:
                 prepared.append(None)

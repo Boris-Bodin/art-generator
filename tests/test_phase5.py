@@ -110,6 +110,25 @@ def test_scale_floored_at_reference():
     assert Engine._scale(ArtworkGenome(width=3200, height=1800)) > 1.0
 
 
+def test_particle_count_scales_with_resolution():
+    from art_generator.core.engine import _build_equation
+    params = {"a": 1.0, "b": 1.0, "c": 1.0, "d": 1.0, "n_particles": 2000, "seed": 1}
+    # scale 1 : paramètres inchangés (rendu historique préservé).
+    eq1 = _build_equation("vector_field", params, 1.0)
+    assert eq1.params["n_particles"] == 2000
+    assert eq1.params is not params or params["n_particles"] == 2000  # non muté
+    # scale > 1 : le nombre de lignes de courant croît linéairement (remplit les creux).
+    eq2 = _build_equation("vector_field", params, 3.0)
+    assert eq2.params["n_particles"] == 6000
+    assert params["n_particles"] == 2000  # l'original n'est pas muté
+    # familles nuage : paramètres inchangés (pas de mise à l'échelle des lignes).
+    from art_generator.core.rng import RNG
+    from art_generator.generators import quality
+    attr = quality.viable_params("attractor", RNG(0))
+    eqa = _build_equation("attractor", attr, 3.0)
+    assert eqa.params == attr
+
+
 def test_stroke_scale_is_per_family():
     from art_generator.renderers.accumulation import _stroke_scale
     # Familles filamentaires : épaisseur/glow suivent la résolution.
