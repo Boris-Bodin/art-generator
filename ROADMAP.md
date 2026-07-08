@@ -98,7 +98,12 @@ génome et est tiré par `generators/genome_generator.py`.
       pondéré par la densité** et met à l'échelle sur un **rayon robuste**, pour
       cadrer sur le cœur de la forme (champ `LayerGenome.framing`).
 
-## Phase 5 — Performance
+## Phase 5 — Export
+
+- [ ] Export vectoriel SVG/PDF (rendu par tracés, via CairoSVG)
+- [ ] Résolutions HD/4K/8K/16K, ratio configuratble, DPI configurable, rendu par tuiles
+
+## Phase 6 — Performance
 
 - [ ] Optimisation : vectorisation poussée, multiprocessing
 - [ ] Accélération GPU (OpenGL/Vulkan/GLSL, Numba/CUDA) sur les points chauds
@@ -106,12 +111,6 @@ génome et est tiré par `generators/genome_generator.py`.
 - [ ] **Viabilité affinée** : critère de « surface minimale » plus fin pour
       rejeter les formes quasi 1D que le contrôle actuel laisse passer
       (`generators/quality.py`).
-
-## Phase 6 — Export
-
-- [ ] Export vectoriel SVG/PDF (rendu par tracés, via CairoSVG)
-- [ ] Résolutions HD/4K/8K/16K, DPI configurable, rendu par tuiles (profite de
-      la performance de la Phase 5)
 
 ## Phase 7 — Interface & navigation
 
