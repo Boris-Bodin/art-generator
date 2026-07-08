@@ -179,6 +179,12 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
   Reste ouvert : rendu réellement temps réel (GPU, Phase 7) pour les familles
   coûteuses (attracteurs, particules).
 
+## Phase 6+ — Bibliothèque de presets
+
+- [ ] **Bibliothèque de presets** (`presets/library.py`) : replace the _BUILTIN seed 
+      by the reading of the *.json file
+- [ ] **Web UI** (`presets/library.py`) : add test
+
 ## Phase 7 — Performance
 
 - [ ] Optimisation : vectorisation poussée, multiprocessing

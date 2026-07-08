@@ -85,6 +85,13 @@ Deux mouvements de **navigation dans l'espace des génomes** : *Muter* (petit pa
 vers un voisin, la forme est préservée) et *Re-tirer les formes* (nouvelles
 formes viables, même mise en scène).
 
+### Web UI
+
+```bash
+python -m http.server 8000 --directory public
+```
+
+
 ### Planche-contact
 
 ```bash
