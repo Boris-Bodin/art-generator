@@ -117,6 +117,13 @@ l'export vectoriel réutilise le même nuage de points projeté.
       grand côté suit le préréglage, le rapport d'aspect façonne les deux
       dimensions. Un préréglage peut porter son **propre ratio** (format
       d'impression *displate* → 4000×5600) ; un `--ratio` explicite prime.
+- [x] **Rendu indépendant de la résolution** (`core/engine.py::_scale`) : le
+      nombre de points étant fixé dans le génome, monter en résolution diluait la
+      densité par pixel et **faisait apparaître plus de fond**. Le rendu met
+      désormais le nombre de points à l'échelle de l'**aire** (référence 1600 px,
+      planché à 1×) pour garder une densité — donc une part de fond — constante ;
+      épaisseur et glow restent en pixels absolus (traits plus fins et nets). À
+      1600 px ou en deçà, le rendu est **inchangé au pixel près**.
 - [x] **Rendu par tuiles** (`core/engine.py::_render_tiled`) : au-delà de 4096 px
       (ou sur `--tile`), l'image est composée **bande par bande** pour borner la
       mémoire (un tampon HDR 16K en float64 pèse plusieurs Go par couche). Chaque

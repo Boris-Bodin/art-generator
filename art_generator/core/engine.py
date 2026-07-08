@@ -30,6 +30,13 @@ _AUTO_TILE_ABOVE = 4096
 # coutures des bandes (le halo est calculé puis rogné).
 _DEFAULT_TILE_HEIGHT = 512
 _HALO = 32
+# Côté de référence (px) pour l'indépendance à la résolution : c'est la taille
+# par défaut pour laquelle le générateur calibre la densité de points. À cette
+# taille (ou en deçà) le rendu est **inchangé** au pixel près ; au-delà, le
+# nombre de points croît avec l'**aire** pour garder la densité par pixel — donc
+# la part de fond — constante (fin du « plus de fond apparaît en montant en
+# résolution »). Épaisseur et glow restent en pixels absolus.
+_REFERENCE_EDGE = 1600
 
 
 class Engine:
@@ -52,11 +59,12 @@ class Engine:
 
     def _render_single(self, genome: ArtworkGenome) -> Image.Image:
         canvas = make_background(genome)
+        scale = self._scale(genome)
 
         for layer in genome.layers:
             equation = registry.build(layer.equation_family, layer.equation_params)
             color, alpha = accumulation.render_layer(
-                equation, layer, genome.width, genome.height
+                equation, layer, genome.width, genome.height, scale
             )
             canvas = blend.composite(
                 canvas, color, alpha, layer.blend_mode, layer.opacity, layer.render_model
@@ -77,11 +85,12 @@ class Engine:
         (bande élargie d'un halo pour un glow continu), on résout et on compose.
         """
         h, w = genome.height, genome.width
+        scale = self._scale(genome)
 
         prepared = []  # (layer, coords, colors, weight, radius, hi)
         for layer in genome.layers:
             equation = registry.build(layer.equation_family, layer.equation_params)
-            coords, colors, weight, radius = accumulation.project_layer(equation, layer, w, h)
+            coords, colors, weight, radius = accumulation.project_layer(equation, layer, w, h, scale)
             if len(coords) == 0:
                 prepared.append(None)
                 continue
@@ -113,6 +122,18 @@ class Engine:
             out[y0:y1] = (np.clip(visible, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
 
         return Image.fromarray(out, mode="RGB")
+
+    # -- indépendance à la résolution ----------------------------------------
+
+    @staticmethod
+    def _scale(genome: ArtworkGenome) -> float:
+        """Facteur linéaire de résolution (≥ 1) par rapport au côté de référence.
+
+        Basé sur la moyenne géométrique des dimensions pour être neutre au ratio.
+        Planché à 1.0 : en deçà de la référence, le rendu reste identique à
+        l'historique (aucune régression, densité inchangée).
+        """
+        return max(1.0, (genome.width * genome.height) ** 0.5 / _REFERENCE_EDGE)
 
     # -- décision & réglage du tiling ----------------------------------------
 

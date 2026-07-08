@@ -100,6 +100,34 @@ def test_non_square_render_matches_dimensions():
     assert img.size == (320, 240)
 
 
+# --- 5b : indépendance à la résolution (densité constante) -------------------
+
+def test_scale_floored_at_reference():
+    # En deçà / à la référence : scale = 1 (rendu inchangé) ; au-delà : > 1.
+    assert Engine._scale(ArtworkGenome(width=800, height=800)) == 1.0
+    assert Engine._scale(ArtworkGenome(width=1600, height=1600)) == 1.0
+    assert Engine._scale(ArtworkGenome(width=3200, height=3200)) == 2.0
+    assert Engine._scale(ArtworkGenome(width=3200, height=1800)) > 1.0
+
+
+def test_density_is_resolution_independent():
+    """Même seed à deux résolutions ≥ référence : la part de fond reste stable.
+
+    C'est la correction du symptôme « plus de fond apparaît en montant en
+    résolution » : le nombre de points croît avec l'aire pour garder la densité
+    par pixel constante.
+    """
+    def background_fraction(size):
+        g = ag.generate(42, size, size)
+        g.background, g.background_params = "black", {}
+        lum = np.asarray(Engine().render(g, tile="off")).astype(float).mean(axis=2)
+        return (lum < 8).mean()
+
+    ref = background_fraction(1600)   # scale = 1
+    big = background_fraction(2560)   # scale = 1.6
+    assert abs(ref - big) < 0.05      # densités quasi identiques (< 5 pts de %)
+
+
 # --- 5b : fonds par bandes (base du rendu par tuiles) ------------------------
 
 @pytest.mark.parametrize("background,params", [

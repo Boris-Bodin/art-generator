@@ -43,6 +43,10 @@ def _point_modulation(
     Retourne ``(weight, radius)`` alignés sur ``points`` :
       * ``weight`` module la contribution lumineuse de chaque point ;
       * ``radius`` (rayon pixel entier) module localement l'épaisseur du trait.
+
+    L'épaisseur reste en pixels *absolus* : à l'inverse de la densité de points,
+    on ne la met pas à l'échelle avec la résolution (voir :func:`project_layer`),
+    ce qui rend des traits plus fins et nets aux grandes tailles.
     """
     n = len(points)
     base_radius = max(0, int(round(layer.thickness)) - 1)
@@ -92,13 +96,20 @@ def _apply_noise(
 
 
 def project_layer(
-    equation: Equation, layer: LayerGenome, width: int, height: int
+    equation: Equation, layer: LayerGenome, width: int, height: int, scale: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
     """Déroule le pipeline d'une couche jusqu'au *nuage de points projeté*.
 
     C'est le tronc commun réutilisé par le rendu simple, le rendu par tuiles
     (Phase 5) et l'export vectoriel : échantillonnage → nettoyage → centrage →
     symétrie → bruit → modulation → cadrage → couleur.
+
+    ``scale`` (facteur linéaire de résolution, Phase 5) rend le rendu
+    *indépendant de la résolution* : le nombre de points croît avec l'**aire**
+    (``scale**2``) pour garder la densité par pixel — donc la part de fond —
+    constante quand on monte en résolution. L'épaisseur et le glow restent en
+    pixels absolus (traits plus fins et nets). À ``scale == 1`` le résultat est
+    identique à l'historique.
 
     Returns:
         ``(coords, colors, weight, radius)`` alignés (longueur ``M``) :
@@ -116,7 +127,8 @@ def project_layer(
         np.empty(0, dtype=np.float64),
         np.empty(0, dtype=np.int64),
     )
-    points, values = equation.sample(layer.n_points)
+    n_points = layer.n_points if scale == 1.0 else int(round(layer.n_points * scale * scale))
+    points, values = equation.sample(n_points)
     points, values = clean_points(points, values)
     if len(points) == 0:
         return empty
@@ -184,7 +196,7 @@ def accumulate(
 
 
 def render_layer(
-    equation: Equation, layer: LayerGenome, width: int, height: int
+    equation: Equation, layer: LayerGenome, width: int, height: int, scale: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray]:
     """Rend une couche et renvoie ``(color, alpha)`` (Phase 4).
 
@@ -194,8 +206,10 @@ def render_layer(
     La composition sur le fond (par cet alpha) est déléguée à
     :func:`art_generator.core.blend.composite`, ce qui découple la forme du fond :
     les zones vides (``alpha = 0``) laissent transparaître le fond.
+
+    ``scale`` : facteur d'indépendance à la résolution (voir :func:`project_layer`).
     """
-    coords, colors, weight, radius = project_layer(equation, layer, width, height)
+    coords, colors, weight, radius = project_layer(equation, layer, width, height, scale)
     if len(coords) == 0:
         return (
             np.zeros((height, width, 3), dtype=np.float64),
