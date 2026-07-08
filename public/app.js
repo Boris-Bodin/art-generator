@@ -88,6 +88,7 @@ async function runRender(label, fn) {
 }
 
 async function renderPreset(name, desc) {
+  console.log(`Rendu du preset « ${name} »…`);
   const out = await runRender(`Rendu du preset « ${name} »…`, () => {
     const b64 = py.render_preset(name);
     return { b64 };
@@ -97,6 +98,7 @@ async function renderPreset(name, desc) {
 
 async function renderRandom() {
   const seed = Math.floor(Math.random() * 2 ** 31);
+  console.log(`Rendu d'une seed aléatoire…`);
   const out = await runRender("Rendu d'une seed aléatoire…", () => {
     const b64 = py.render_seed(seed);
     return { b64 };
@@ -173,6 +175,7 @@ async function boot() {
   }
 
   // 3) Prêt : on active les contrôles et on rend une première œuvre aléatoire.
+  els.btnRandom.addEventListener("click", () => renderRandom());
   setControlsDisabled(false);
   setStatus("Prêt.");
   await renderRandom();
