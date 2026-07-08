@@ -72,13 +72,14 @@ Un atelier interactif (Tkinter, aucune dépendance supplémentaire) en trois
 colonnes :
 
 - **Réglages globaux** — changement de seed (précédent/suivant/aléatoire),
-  bibliothèque de presets, ouverture/enregistrement JSON, export image pleine
-  résolution, fond.
+  *Nouveau (vierge)* pour repartir d'un canevas vide, bibliothèque de presets,
+  ouverture/enregistrement JSON, export image pleine résolution, fond.
 - **Aperçu temps réel** — rendu réduit *fidèle* à l'œuvre finale (grâce à
   l'indépendance à la résolution), calculé hors du thread principal et débouncé
   pour rester fluide pendant l'édition.
-- **Éditeur de couche** — famille d'équation, mode de fusion, médium
-  (light/ink), opacité, glow, exposition, épaisseur, symétrie, bruit, palette.
+- **Éditeur de couche** — ajout/suppression de couches (jusqu'au canevas vide),
+  famille d'équation, mode de fusion, médium (light/ink), opacité, glow,
+  exposition, épaisseur, symétrie, bruit, palette.
 
 Deux mouvements de **navigation dans l'espace des génomes** : *Muter* (petit pas
 vers un voisin, la forme est préservée) et *Re-tirer les formes* (nouvelles

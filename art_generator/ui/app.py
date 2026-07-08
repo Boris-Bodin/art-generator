@@ -26,7 +26,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from PIL import ImageTk
 
-from ..core.genome import ArtworkGenome
+from ..core.genome import ArtworkGenome, LayerGenome
 from ..equations import registry
 from ..exporters import genome_io, image as image_export
 from ..generators import navigation
@@ -61,6 +61,7 @@ class ArtGeneratorApp(tk.Tk):
         self._current_layer = 0
 
         self._loading = False          # supprime les callbacks pendant un remplissage programmatique
+        self._editor_widgets: list = []  # widgets de l'éditeur de couche (désactivés si aucune couche)
         self._render_job: str | None = None
         self._request_id = 0
         self._result_q: queue.Queue = queue.Queue()
@@ -81,8 +82,12 @@ class ArtGeneratorApp(tk.Tk):
         self._build_center_panel()
         self._build_right_panel()
 
-    def _labelled_scale(self, parent, label, lo, hi, command):
-        """Ligne étiquette + curseur ; renvoie la ``DoubleVar`` liée."""
+    def _labelled_scale(self, parent, label, lo, hi, command, register=False):
+        """Ligne étiquette + curseur ; renvoie la ``DoubleVar`` liée.
+
+        ``register`` inscrit le curseur dans :attr:`_editor_widgets` afin qu'il
+        soit désactivé quand l'œuvre ne contient aucune couche.
+        """
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text=label, width=12).pack(side="left")
@@ -90,10 +95,16 @@ class ArtGeneratorApp(tk.Tk):
         scale = ttk.Scale(row, from_=lo, to=hi, variable=var,
                           command=lambda _v: command(var.get()))
         scale.pack(side="left", fill="x", expand=True)
+        if register:
+            self._editor_widgets.append(scale)
         return var
 
-    def _labelled_combo(self, parent, label, values, command):
-        """Ligne étiquette + combobox ; renvoie la ``StringVar`` liée."""
+    def _labelled_combo(self, parent, label, values, command, register=False):
+        """Ligne étiquette + combobox ; renvoie la ``StringVar`` liée.
+
+        ``register`` inscrit la combobox dans :attr:`_editor_widgets` afin qu'elle
+        soit désactivée quand l'œuvre ne contient aucune couche.
+        """
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text=label, width=12).pack(side="left")
@@ -101,6 +112,8 @@ class ArtGeneratorApp(tk.Tk):
         combo = ttk.Combobox(row, textvariable=var, values=values, state="readonly")
         combo.pack(side="left", fill="x", expand=True)
         combo.bind("<<ComboboxSelected>>", lambda _e: command(var.get()))
+        if register:
+            self._editor_widgets.append(combo)
         return var
 
     def _build_left_panel(self) -> None:
@@ -120,6 +133,7 @@ class ArtGeneratorApp(tk.Tk):
         ttk.Button(seed_row, text="▶", width=3, command=lambda: self._step_seed(1)).pack(side="left")
 
         ttk.Button(panel, text="Seed aléatoire", command=self._random_seed).pack(fill="x", pady=2)
+        ttk.Button(panel, text="Nouveau (vierge)", command=self._new_blank).pack(fill="x", pady=2)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
         ttk.Label(panel, text="Naviguer", font=("", 10, "bold")).pack(anchor="w")
@@ -166,30 +180,38 @@ class ArtGeneratorApp(tk.Tk):
         self._layer_combo.pack(fill="x", pady=2)
         self._layer_combo.bind("<<ComboboxSelected>>", lambda _e: self._select_layer())
 
-        self._family_var = self._labelled_combo(panel, "Famille", registry.families(), self._on_family)
-        ttk.Button(panel, text="Palette aléatoire", command=self._random_palette).pack(fill="x", pady=2)
+        buttons = ttk.Frame(panel)
+        buttons.pack(fill="x", pady=2)
+        ttk.Button(buttons, text="＋ Ajouter", command=self._add_layer).pack(side="left", fill="x", expand=True)
+        self._delete_btn = ttk.Button(buttons, text="－ Supprimer", command=self._delete_layer)
+        self._delete_btn.pack(side="left", fill="x", expand=True)
+
+        self._family_var = self._labelled_combo(panel, "Famille", registry.families(), self._on_family, register=True)
+        self._palette_btn = ttk.Button(panel, text="Palette aléatoire", command=self._random_palette)
+        self._palette_btn.pack(fill="x", pady=2)
+        self._editor_widgets.append(self._palette_btn)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
-        self._blend_var = self._labelled_combo(panel, "Fusion", _BLEND_MODES, lambda v: self._set_layer("blend_mode", v))
-        self._model_var = self._labelled_combo(panel, "Médium", _RENDER_MODELS, lambda v: self._set_layer("render_model", v))
-        self._colorby_var = self._labelled_combo(panel, "Couleur par", _COLOR_BY, lambda v: self._set_layer("color_by", v))
-        self._framing_var = self._labelled_combo(panel, "Cadrage", _FRAMINGS, lambda v: self._set_layer("framing", v))
+        self._blend_var = self._labelled_combo(panel, "Fusion", _BLEND_MODES, lambda v: self._set_layer("blend_mode", v), register=True)
+        self._model_var = self._labelled_combo(panel, "Médium", _RENDER_MODELS, lambda v: self._set_layer("render_model", v), register=True)
+        self._colorby_var = self._labelled_combo(panel, "Couleur par", _COLOR_BY, lambda v: self._set_layer("color_by", v), register=True)
+        self._framing_var = self._labelled_combo(panel, "Cadrage", _FRAMINGS, lambda v: self._set_layer("framing", v), register=True)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
-        self._opacity_var = self._labelled_scale(panel, "Opacité", 0.0, 1.0, lambda v: self._set_layer("opacity", v))
-        self._glow_var = self._labelled_scale(panel, "Glow", 0.0, 1.0, lambda v: self._set_layer("glow", v))
-        self._exposure_var = self._labelled_scale(panel, "Exposition", 0.4, 2.5, lambda v: self._set_layer("exposure", v))
-        self._thickness_var = self._labelled_scale(panel, "Épaisseur", 1.0, 4.0, lambda v: self._set_layer("thickness", v))
+        self._opacity_var = self._labelled_scale(panel, "Opacité", 0.0, 1.0, lambda v: self._set_layer("opacity", v), register=True)
+        self._glow_var = self._labelled_scale(panel, "Glow", 0.0, 1.0, lambda v: self._set_layer("glow", v), register=True)
+        self._exposure_var = self._labelled_scale(panel, "Exposition", 0.4, 2.5, lambda v: self._set_layer("exposure", v), register=True)
+        self._thickness_var = self._labelled_scale(panel, "Épaisseur", 1.0, 4.0, lambda v: self._set_layer("thickness", v), register=True)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
-        self._symmetry_var = self._labelled_combo(panel, "Symétrie", _SYMMETRIES, lambda v: self._set_layer("symmetry", v))
-        self._order_var = self._labelled_scale(panel, "Ordre", 2, 12, lambda v: self._set_layer("symmetry_order", int(round(v))))
+        self._symmetry_var = self._labelled_combo(panel, "Symétrie", _SYMMETRIES, lambda v: self._set_layer("symmetry", v), register=True)
+        self._order_var = self._labelled_scale(panel, "Ordre", 2, 12, lambda v: self._set_layer("symmetry_order", int(round(v))), register=True)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
-        self._noise_var = self._labelled_combo(panel, "Bruit", _NOISE_TYPES, lambda v: self._set_layer("noise_type", v))
-        self._warp_var = self._labelled_scale(panel, "Warp", 0.0, 0.6, lambda v: self._set_layer("warp", v))
-        self._cnoise_var = self._labelled_scale(panel, "Bruit coul.", 0.0, 0.6, lambda v: self._set_layer("color_noise", v))
-        self._lnoise_var = self._labelled_scale(panel, "Bruit lum.", 0.0, 1.0, lambda v: self._set_layer("light_noise", v))
+        self._noise_var = self._labelled_combo(panel, "Bruit", _NOISE_TYPES, lambda v: self._set_layer("noise_type", v), register=True)
+        self._warp_var = self._labelled_scale(panel, "Warp", 0.0, 0.6, lambda v: self._set_layer("warp", v), register=True)
+        self._cnoise_var = self._labelled_scale(panel, "Bruit coul.", 0.0, 0.6, lambda v: self._set_layer("color_noise", v), register=True)
+        self._lnoise_var = self._labelled_scale(panel, "Bruit lum.", 0.0, 1.0, lambda v: self._set_layer("light_noise", v), register=True)
 
     # -- synchronisation widgets <-> génome ----------------------------------
 
@@ -206,11 +228,27 @@ class ArtGeneratorApp(tk.Tk):
             self._vignette_var.set(float(self.genome.background_params.get("vignette", 0.0)))
             n = len(self.genome.layers)
             self._layer_combo["values"] = [f"Couche {i + 1}/{n}" for i in range(n)]
+            if n == 0:
+                self._current_layer = 0
+                self._layer_var.set("(aucune couche)")
+                self._set_editor_enabled(False)
+                self._delete_btn.state(["disabled"])
+                return
             self._current_layer = min(self._current_layer, n - 1)
             self._layer_var.set(f"Couche {self._current_layer + 1}/{n}")
+            self._set_editor_enabled(True)
+            self._delete_btn.state(["!disabled"])  # supprimer jusqu'à 0 couche est permis
             self._refresh_layer()
         finally:
             self._loading = False
+
+    def _set_editor_enabled(self, enabled: bool) -> None:
+        """Active ou désactive les widgets d'édition de couche."""
+        for widget in self._editor_widgets:
+            if isinstance(widget, ttk.Combobox):
+                widget.configure(state="readonly" if enabled else "disabled")
+            else:
+                widget.configure(state="normal" if enabled else "disabled")
 
     def _refresh_layer(self) -> None:
         layer = self._layer
@@ -231,12 +269,14 @@ class ArtGeneratorApp(tk.Tk):
         self._lnoise_var.set(layer.light_noise)
 
     def _set_layer(self, field: str, value) -> None:
-        if self._loading:
+        if self._loading or not self.genome.layers:
             return
         setattr(self._layer, field, value)
         self._schedule_render()
 
     def _select_layer(self) -> None:
+        if not self.genome.layers:
+            return
         label = self._layer_var.get()
         try:
             self._current_layer = int(label.split()[1].split("/")[0]) - 1
@@ -270,6 +310,20 @@ class ArtGeneratorApp(tk.Tk):
     def _random_seed(self) -> None:
         self._nav_seed = random.randint(0, 2**31 - 1)
         self._set_genome(generate(self._nav_seed))
+
+    def _new_blank(self) -> None:
+        """Repart de zéro : canevas vide (fond noir, aucune couche)."""
+        blank = ArtworkGenome(
+            seed=self.genome.seed,
+            width=self.genome.width,
+            height=self.genome.height,
+            background="black",
+            background_params={"vignette": 0.0},
+            layers=[],
+            title="Œuvre vierge",
+        )
+        self._current_layer = 0
+        self._set_genome(blank)
 
     def _mutate(self) -> None:
         self._nav_seed = (self._nav_seed + 1) % (2**31)
@@ -355,7 +409,7 @@ class ArtGeneratorApp(tk.Tk):
     # -- actions droite -------------------------------------------------------
 
     def _on_family(self, family: str) -> None:
-        if self._loading:
+        if self._loading or not self.genome.layers:
             return
         from ..generators import quality
         from ..core.rng import RNG
@@ -367,10 +421,51 @@ class ArtGeneratorApp(tk.Tk):
         self._schedule_render()
 
     def _random_palette(self) -> None:
+        if not self.genome.layers:
+            return
         from ..core.rng import RNG
 
         self._nav_seed = (self._nav_seed + 1) % (2**31)
         self._layer.palette = procedural.random_palette(RNG(self._nav_seed))
+        self._schedule_render()
+
+    # -- gestion des couches --------------------------------------------------
+
+    def _make_layer(self) -> LayerGenome:
+        """Fabrique une nouvelle couche viable, prête à être empilée.
+
+        La forme est garantie non dégénérée par :mod:`generators.quality` et le
+        tirage est piloté par ``_nav_seed`` (reproductible, avancé à chaque appel).
+        """
+        from ..generators import quality
+        from ..core.rng import RNG
+
+        self._nav_seed = (self._nav_seed + 1) % (2**31)
+        rng = RNG(self._nav_seed)
+        family = rng.choice(registry.families())
+        return LayerGenome(
+            equation_family=family,
+            equation_params=quality.viable_params(family, rng),
+            palette=procedural.random_palette(rng),
+            color_by="velocity" if family == "attractor" else "t",
+            blend_mode="add",
+            opacity=1.0,
+        )
+
+    def _add_layer(self) -> None:
+        """Ajoute une couche et la sélectionne."""
+        self.genome.layers.append(self._make_layer())
+        self._current_layer = len(self.genome.layers) - 1
+        self._refresh_all()
+        self._schedule_render()
+
+    def _delete_layer(self) -> None:
+        """Supprime la couche courante (jusqu'à un canevas vide)."""
+        if not self.genome.layers:
+            return
+        del self.genome.layers[self._current_layer]
+        self._current_layer = max(0, self._current_layer - 1)
+        self._refresh_all()
         self._schedule_render()
 
     # -- rendu d'aperçu (débouncé, hors thread principal) --------------------
