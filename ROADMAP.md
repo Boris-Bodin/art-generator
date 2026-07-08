@@ -126,13 +126,15 @@ l'export vectoriel réutilise le même nuage de points projeté.
       sont mis à l'échelle **que pour les familles filamentaires** (vector_field,
       parametric, polar, complex — `accumulation._stroke_scale`), afin de
       préserver la densité du voile de lignes ; les familles nuage (attractor,
-      particles, fractal) gardent des traits fins et nets. Le **nombre de lignes
-      de courant / particules** (`n_particles` de vector_field & particles) croît
-      lui aussi avec la résolution (`core/engine.py::_build_equation`), sans quoi
-      monter en résolution ne rallongerait que les trajectoires en laissant les
-      creux (p. ex. le centre) trop clairs. La borne de points du Buddhabrot
-      (`equations/fractal.py`) a été relevée pour suivre l'aire. À 1600 px ou en
-      deçà, le rendu est **inchangé au pixel près**.
+      particles, fractal) gardent des traits fins et nets. Le **support 1D pur**
+      (vector_field) fait croître ses points linéairement plutôt qu'avec l'aire
+      (`accumulation._point_factor`). Enfin, les familles à **trajectoires
+      intégrées** (vector_field, particles) préservent leur **durée intégrée**
+      (`steps × dt`) en réduisant `dt` d'autant (`core/engine.py::_build_equation`)
+      : sans cela, monter en résolution rallongerait les trajectoires et
+      **changerait la forme** au lieu d'affiner l'échantillonnage. La borne de
+      points du Buddhabrot (`equations/fractal.py`) a été relevée pour suivre
+      l'aire. À 1600 px ou en deçà, le rendu est **inchangé au pixel près**.
 - [x] **Rendu par tuiles** (`core/engine.py::_render_tiled`) : au-delà de 4096 px
       (ou sur `--tile`), l'image est composée **bande par bande** pour borner la
       mémoire (un tampon HDR 16K en float64 pèse plusieurs Go par couche). Chaque

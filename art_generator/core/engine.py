@@ -32,33 +32,43 @@ _DEFAULT_TILE_HEIGHT = 512
 _HALO = 32
 # Côté de référence (px) pour l'indépendance à la résolution : c'est la taille
 # par défaut pour laquelle le générateur calibre la densité de points. À cette
-# taille (ou en deçà) le rendu est **inchangé** au pixel près ; au-delà, le
-# nombre de points croît avec l'**aire** pour garder la densité par pixel — donc
-# la part de fond — constante (fin du « plus de fond apparaît en montant en
-# résolution »). L'épaisseur et le glow ne sont mis à l'échelle que pour les
-# familles filamentaires (voir accumulation._stroke_scale) ; les familles nuage
-# gardent des traits fins et nets.
+# taille (ou en deçà) le rendu est **inchangé** au pixel près. Au-delà, le nombre
+# de points croît avec l'**aire** pour garder la densité par pixel constante
+# (accumulation._point_count) ; les familles filamentaires épaississent en plus
+# traits et glow (accumulation._stroke_scale) ; et les familles à trajectoires
+# préservent leur durée intégrée (_build_equation) pour garder la **même forme**.
 _REFERENCE_EDGE = 1600
 
-# Familles où le nombre de lignes de courant / particules est un paramètre fixe
-# (``n_particles``), la densité de points ne pilotant que la *longueur* des
-# trajectoires (``steps = n // n_particles``). En montant en résolution, sans
-# rien faire, on ne ferait que rallonger les trajectoires — les creux (p. ex. le
-# centre) resteraient clairs. On fait donc croître ``n_particles`` linéairement
-# avec la résolution : plus de lignes remplissent les creux, tandis que la
-# longueur des trajectoires suit aussi la résolution.
-_PARTICLE_FAMILIES = frozenset({"vector_field", "particles"})
+# Familles à **trajectoires intégrées** (advection pas à pas). La densité de
+# points n'y pilote que le nombre de pas (``steps = n // n_particles``, ``dt``
+# fixe) : sans précaution, monter en résolution rallongerait la durée intégrée
+# ``steps × dt`` — les courbes changeraient de **forme** au lieu d'être juste
+# échantillonnées plus finement. On garde donc les **mêmes lignes de courant**
+# (``n_particles`` inchangé) sur la **même durée** en réduisant ``dt`` d'autant
+# (le nombre de pas croît linéairement avec la résolution, cf. `_point_count`).
+# ``life`` (durée de vie en pas, pour ``particles``) suit le même facteur.
+_TRAJECTORY_FAMILIES = frozenset({"vector_field", "particles"})
 
 
 def _build_equation(family: str, params: dict, scale: float):
-    """Construit l'équation d'une couche, en adaptant à la résolution le nombre
-    de lignes/particules des familles concernées (voir :data:`_PARTICLE_FAMILIES`).
+    """Construit l'équation d'une couche en préservant la **forme** à la montée
+    en résolution.
 
-    À ``scale == 1`` les paramètres sont inchangés : rendu identique à l'historique.
+    Pour les familles à trajectoires (voir :data:`_TRAJECTORY_FAMILIES`), le
+    nombre de pas ``steps = n // n_particles`` croît comme le nombre de points
+    (facteur ``accumulation._point_factor`` : linéaire ou aire selon la famille).
+    On réduit ``dt`` de ce même facteur — et on étire ``life`` (durée de vie en
+    pas) d'autant — pour que la durée intégrée ``steps × dt`` reste constante :
+    **mêmes courbes**, échantillonnées plus finement. À ``scale == 1`` les
+    paramètres sont inchangés (rendu identique à l'historique).
     """
-    if scale != 1.0 and family in _PARTICLE_FAMILIES and "n_particles" in params:
+    if scale != 1.0 and family in _TRAJECTORY_FAMILIES:
+        factor = accumulation._point_factor(family, scale)
         params = dict(params)
-        params["n_particles"] = max(1, int(round(params["n_particles"] * scale)))
+        if "dt" in params:
+            params["dt"] = params["dt"] / factor
+        if "life" in params:  # durée de vie exprimée en pas (particles)
+            params["life"] = params["life"] * factor
     return registry.build(family, params)
 
 

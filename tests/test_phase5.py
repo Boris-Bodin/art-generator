@@ -110,23 +110,39 @@ def test_scale_floored_at_reference():
     assert Engine._scale(ArtworkGenome(width=3200, height=1800)) > 1.0
 
 
-def test_particle_count_scales_with_resolution():
+def test_trajectory_dt_scales_to_preserve_shape():
     from art_generator.core.engine import _build_equation
-    params = {"a": 1.0, "b": 1.0, "c": 1.0, "d": 1.0, "n_particles": 2000, "seed": 1}
+    params = {"a": 1.0, "b": 1.0, "c": 1.0, "d": 1.0, "n_particles": 2000, "dt": 0.02, "seed": 1}
     # scale 1 : paramètres inchangés (rendu historique préservé).
     eq1 = _build_equation("vector_field", params, 1.0)
-    assert eq1.params["n_particles"] == 2000
-    assert eq1.params is not params or params["n_particles"] == 2000  # non muté
-    # scale > 1 : le nombre de lignes de courant croît linéairement (remplit les creux).
-    eq2 = _build_equation("vector_field", params, 3.0)
-    assert eq2.params["n_particles"] == 6000
-    assert params["n_particles"] == 2000  # l'original n'est pas muté
-    # familles nuage : paramètres inchangés (pas de mise à l'échelle des lignes).
+    assert eq1.params["dt"] == 0.02 and eq1.params["n_particles"] == 2000
+    # vector_field : support 1D -> points ∝ linéaire, donc dt réduit ∝ 1/scale
+    # (mêmes lignes de courant, n_particles inchangé, courbes identiques).
+    eq2 = _build_equation("vector_field", params, 4.0)
+    assert eq2.params["dt"] == 0.02 / 4.0
+    assert eq2.params["n_particles"] == 2000       # forme préservée
+    assert params["dt"] == 0.02                    # original non muté
+    # particles : support 2D -> points ∝ aire, donc dt ∝ 1/scale² et life ∝ scale².
+    pp = {"n_particles": 3000, "dt": 0.03, "life": 50.0, "seed": 2}
+    eqp = _build_equation("particles", pp, 3.0)
+    assert eqp.params["dt"] == 0.03 / 9.0 and eqp.params["life"] == 50.0 * 9.0
+    # familles nuage : paramètres inchangés.
     from art_generator.core.rng import RNG
     from art_generator.generators import quality
     attr = quality.viable_params("attractor", RNG(0))
-    eqa = _build_equation("attractor", attr, 3.0)
-    assert eqa.params == attr
+    assert _build_equation("attractor", attr, 3.0).params == attr
+
+
+def test_point_count_scales_by_support_dimension():
+    from art_generator.renderers.accumulation import _point_count
+    # support 2D : ∝ aire (densité surfacique par pixel constante).
+    assert _point_count("attractor", 1000, 2.0) == 4000
+    assert _point_count("particles", 1000, 3.0) == 9000
+    # support 1D pur (vector_field) : ∝ linéaire (densité le long des lignes).
+    assert _point_count("vector_field", 1000, 2.0) == 2000
+    assert _point_count("vector_field", 1000, 3.0) == 3000
+    # scale 1 : inchangé pour toutes.
+    assert _point_count("attractor", 1234, 1.0) == 1234
 
 
 def test_stroke_scale_is_per_family():

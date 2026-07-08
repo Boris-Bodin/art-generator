@@ -29,10 +29,35 @@ _MAX_RADIUS = 6  # borne l'épaisseur (et donc le coût de l'accumulation)
 # remplissent une aire 2D : leur densité suffit, on garde des points fins et nets.
 _STROKE_SCALE_FAMILIES = frozenset({"vector_field", "parametric", "polar", "complex"})
 
+# Familles au support **strictement 1D** (un réseau de lignes de courant, pas un
+# voile qui remplit une aire) : leur densité par pixel se conserve en faisant
+# croître le nombre de points **linéairement** (``scale``), pas avec l'aire — sans
+# quoi les lignes deviennent trop denses (centre trop sombre) en HD. Les autres
+# familles remplissent une aire 2D et suivent l'aire (``scale**2``).
+_LINEAR_POINT_FAMILIES = frozenset({"vector_field"})
+
 
 def _stroke_scale(family: str, scale: float) -> float:
     """Facteur d'échelle des traits (épaisseur/glow) selon la famille (Phase 5)."""
     return scale if family in _STROKE_SCALE_FAMILIES else 1.0
+
+
+def _point_factor(family: str, scale: float) -> float:
+    """Facteur multiplicatif du nombre de points selon la résolution et la famille.
+
+    ``scale`` (linéaire) pour les supports 1D purs (:data:`_LINEAR_POINT_FAMILIES`),
+    ``scale**2`` (aire) sinon — de sorte que la densité par pixel reste constante
+    dans les deux cas. Ce facteur pilote aussi la réduction de ``dt`` des familles
+    à trajectoires (voir ``engine._build_equation``), pour préserver la forme.
+    """
+    if scale == 1.0:
+        return 1.0
+    return scale if family in _LINEAR_POINT_FAMILIES else scale * scale
+
+
+def _point_count(family: str, n_points: int, scale: float) -> int:
+    """Nombre de points à échantillonner pour une couche (voir :func:`_point_factor`)."""
+    return int(round(n_points * _point_factor(family, scale)))
 
 
 def _disk_offsets(radius: int) -> list[tuple[int, int, int]]:
@@ -120,13 +145,11 @@ def project_layer(
     symétrie → bruit → modulation → cadrage → couleur.
 
     ``scale`` (facteur linéaire de résolution, Phase 5) rend le rendu
-    *indépendant de la résolution* : le nombre de points croît avec l'**aire**
-    (``scale**2``) pour garder la densité par pixel — donc la part de fond —
-    constante quand on monte en résolution. Pour les familles filamentaires,
-    l'épaisseur et le glow croissent en plus linéairement (voir
-    :func:`_stroke_scale`) afin de préserver la densité du voile de lignes ; les
-    familles nuage gardent des traits fins et nets. À ``scale == 1`` le résultat
-    est identique à l'historique.
+    *indépendant de la résolution* : le nombre de points croît pour garder la
+    densité par pixel constante — avec l'aire, ou linéairement pour les supports
+    1D purs (:func:`_point_count`). Les familles filamentaires épaississent en plus
+    traits et glow (:func:`_stroke_scale`) ; les familles nuage gardent des traits
+    fins et nets. À ``scale == 1`` le résultat est identique à l'historique.
 
     Returns:
         ``(coords, colors, weight, radius)`` alignés (longueur ``M``) :
@@ -144,7 +167,7 @@ def project_layer(
         np.empty(0, dtype=np.float64),
         np.empty(0, dtype=np.int64),
     )
-    n_points = layer.n_points if scale == 1.0 else int(round(layer.n_points * scale * scale))
+    n_points = _point_count(layer.equation_family, layer.n_points, scale)
     points, values = equation.sample(n_points)
     points, values = clean_points(points, values)
     if len(points) == 0:
