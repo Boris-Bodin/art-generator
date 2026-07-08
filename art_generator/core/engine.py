@@ -35,7 +35,9 @@ _HALO = 32
 # taille (ou en deçà) le rendu est **inchangé** au pixel près ; au-delà, le
 # nombre de points croît avec l'**aire** pour garder la densité par pixel — donc
 # la part de fond — constante (fin du « plus de fond apparaît en montant en
-# résolution »). Épaisseur et glow restent en pixels absolus.
+# résolution »). L'épaisseur et le glow ne sont mis à l'échelle que pour les
+# familles filamentaires (voir accumulation._stroke_scale) ; les familles nuage
+# gardent des traits fins et nets.
 _REFERENCE_EDGE = 1600
 
 
@@ -86,6 +88,9 @@ class Engine:
         """
         h, w = genome.height, genome.width
         scale = self._scale(genome)
+        # Le halo doit couvrir le rayon effectif du glow (jusqu'à 6·scale pour les
+        # familles filamentaires) pour rester continu aux coutures : ~3σ + marge.
+        halo = max(_HALO, 3 * max(1, round(6 * scale)) + 8)
 
         prepared = []  # (layer, coords, colors, weight, radius, hi)
         for layer in genome.layers:
@@ -103,8 +108,8 @@ class Engine:
         out = np.empty((h, w, 3), dtype=np.uint8)
         for y0 in range(0, h, tile_height):
             y1 = min(h, y0 + tile_height)
-            ya = max(0, y0 - _HALO)
-            yb = min(h, y1 + _HALO)
+            ya = max(0, y0 - halo)
+            yb = min(h, y1 + halo)
 
             band = make_background(genome, ya, yb)
             for item in prepared:
@@ -112,7 +117,8 @@ class Engine:
                     continue
                 layer, coords, colors, weight, radius, hi = item
                 acc_col, acc_w = accumulation.accumulate(coords, colors, weight, radius, w, ya, yb)
-                color, alpha = accumulation._resolve(acc_col, acc_w, layer, hi=hi)
+                stroke = accumulation._stroke_scale(layer.equation_family, scale)
+                color, alpha = accumulation._resolve(acc_col, acc_w, layer, hi=hi, scale=stroke)
                 band = blend.composite(
                     band, color, alpha, layer.blend_mode, layer.opacity, layer.render_model
                 )

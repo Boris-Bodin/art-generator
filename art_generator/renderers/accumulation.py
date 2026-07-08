@@ -21,6 +21,19 @@ from .symmetry import apply_symmetry
 
 _MAX_RADIUS = 6  # borne l'épaisseur (et donc le coût de l'accumulation)
 
+# Familles dont la forme est **filamentaire** (courbes/lignes 1D) : leur couverture
+# n'est pas conservée par la seule densité de points quand on monte en résolution
+# (des traits de 1 px absolu couvrent relativement moins d'aire). On y met donc
+# l'épaisseur *et* le glow à l'échelle de la résolution pour garder un voile de
+# densité constante. Les familles « nuage » (attractor, particles, fractal)
+# remplissent une aire 2D : leur densité suffit, on garde des points fins et nets.
+_STROKE_SCALE_FAMILIES = frozenset({"vector_field", "parametric", "polar", "complex"})
+
+
+def _stroke_scale(family: str, scale: float) -> float:
+    """Facteur d'échelle des traits (épaisseur/glow) selon la famille (Phase 5)."""
+    return scale if family in _STROKE_SCALE_FAMILIES else 1.0
+
 
 def _disk_offsets(radius: int) -> list[tuple[int, int, int]]:
     """Offsets ``(dx, dy, dist2)`` d'un disque de rayon pixel ``radius``."""
@@ -36,7 +49,7 @@ def _disk_offsets(radius: int) -> list[tuple[int, int, int]]:
 
 
 def _point_modulation(
-    points: np.ndarray, layer: LayerGenome
+    points: np.ndarray, layer: LayerGenome, stroke_scale: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray]:
     """Poids lumineux et rayon d'épaisseur par point, pilotés par bruit (Phase 2+).
 
@@ -44,12 +57,14 @@ def _point_modulation(
       * ``weight`` module la contribution lumineuse de chaque point ;
       * ``radius`` (rayon pixel entier) module localement l'épaisseur du trait.
 
-    L'épaisseur reste en pixels *absolus* : à l'inverse de la densité de points,
-    on ne la met pas à l'échelle avec la résolution (voir :func:`project_layer`),
-    ce qui rend des traits plus fins et nets aux grandes tailles.
+    ``stroke_scale`` (Phase 5) épaissit les traits proportionnellement à la
+    résolution pour les familles filamentaires (voir :func:`_stroke_scale`) ;
+    il vaut 1 pour les familles nuage (traits fins et nets). À 1, calcul
+    identique à l'historique.
     """
     n = len(points)
-    base_radius = max(0, int(round(layer.thickness)) - 1)
+    max_radius = int(round(_MAX_RADIUS * stroke_scale))
+    base_radius = max(0, int(round(layer.thickness * stroke_scale)) - 1)
     weight = np.ones(n, dtype=np.float64)
     radius = np.full(n, base_radius, dtype=np.int64)
 
@@ -65,8 +80,8 @@ def _point_modulation(
     if layer.light_noise > 0:
         weight = np.clip(1.0 - layer.light_noise + 2.0 * layer.light_noise * u, 0.05, 4.0)
     if layer.thickness_noise > 0:
-        r = np.round(layer.thickness + layer.thickness_noise * u).astype(np.int64) - 1
-        radius = np.clip(r, 0, _MAX_RADIUS)
+        r = np.round((layer.thickness + layer.thickness_noise * u) * stroke_scale).astype(np.int64) - 1
+        radius = np.clip(r, 0, max_radius)
     return weight, radius
 
 
@@ -107,9 +122,11 @@ def project_layer(
     ``scale`` (facteur linéaire de résolution, Phase 5) rend le rendu
     *indépendant de la résolution* : le nombre de points croît avec l'**aire**
     (``scale**2``) pour garder la densité par pixel — donc la part de fond —
-    constante quand on monte en résolution. L'épaisseur et le glow restent en
-    pixels absolus (traits plus fins et nets). À ``scale == 1`` le résultat est
-    identique à l'historique.
+    constante quand on monte en résolution. Pour les familles filamentaires,
+    l'épaisseur et le glow croissent en plus linéairement (voir
+    :func:`_stroke_scale`) afin de préserver la densité du voile de lignes ; les
+    familles nuage gardent des traits fins et nets. À ``scale == 1`` le résultat
+    est identique à l'historique.
 
     Returns:
         ``(coords, colors, weight, radius)`` alignés (longueur ``M``) :
@@ -142,7 +159,7 @@ def project_layer(
     if layer.noise_type != "none":
         points, values = _apply_noise(points, values, layer)
 
-    weight, radius = _point_modulation(points, layer)
+    weight, radius = _point_modulation(points, layer, _stroke_scale(layer.equation_family, scale))
 
     coords, inside = fit_to_canvas(points, width, height, center_on=layer.framing)
     if len(coords) == 0:
@@ -216,7 +233,7 @@ def render_layer(
             np.zeros((height, width), dtype=np.float64),
         )
     acc_col, acc_w = accumulate(coords, colors, weight, radius, width, 0, height)
-    return _resolve(acc_col, acc_w, layer)
+    return _resolve(acc_col, acc_w, layer, scale=_stroke_scale(layer.equation_family, scale))
 
 
 def _blur(a: np.ndarray, radius: int = 6) -> np.ndarray:
@@ -245,7 +262,11 @@ def global_hi(acc_w: np.ndarray, layer: LayerGenome) -> float | None:
 
 
 def _resolve(
-    acc_col: np.ndarray, acc_w: np.ndarray, layer: LayerGenome, hi: object = _AUTO
+    acc_col: np.ndarray,
+    acc_w: np.ndarray,
+    layer: LayerGenome,
+    hi: object = _AUTO,
+    scale: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compression tonale HDR + halo → ``(color, alpha)`` (Phase 4).
 
@@ -258,8 +279,13 @@ def _resolve(
     localement sur ``acc_w`` (chemin simple, comportement historique) ; le rendu
     par tuiles passe le ``hi`` **global** de la couche pour que chaque bande soit
     normalisée de façon cohérente (voir :func:`global_hi`).
+
+    ``scale`` : facteur de trait (Phase 5) élargissant le rayon du halo (glow)
+    proportionnellement pour les familles filamentaires. À ``scale == 1`` le rayon
+    vaut 6 px (identique à l'historique).
     """
     eps = 1e-9
+    blur_radius = max(1, int(round(6 * scale)))
     # Teinte moyenne par pixel.
     avg_col = acc_col / np.maximum(acc_w[..., None], eps)
 
@@ -277,8 +303,8 @@ def _resolve(
 
     if layer.glow > 0:
         # Le halo enrichit couleur *et* couverture, de façon cohérente.
-        premult = premult + layer.glow * _blur(premult)
-        alpha = alpha + layer.glow * _blur(alpha)
+        premult = premult + layer.glow * _blur(premult, blur_radius)
+        alpha = alpha + layer.glow * _blur(alpha, blur_radius)
 
     alpha = np.clip(alpha, 0.0, 1.0)
     # Dé-prémultiplication : color * alpha == premult (couverture non écrêtée à 0).

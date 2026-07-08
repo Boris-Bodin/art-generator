@@ -121,8 +121,13 @@ l'export vectoriel réutilise le même nuage de points projeté.
       nombre de points étant fixé dans le génome, monter en résolution diluait la
       densité par pixel et **faisait apparaître plus de fond**. Le rendu met
       désormais le nombre de points à l'échelle de l'**aire** (référence 1600 px,
-      planché à 1×) pour garder une densité — donc une part de fond — constante ;
-      épaisseur et glow restent en pixels absolus (traits plus fins et nets). À
+      planché à 1×) pour garder une densité constante. Comme une aire 2D et un
+      réseau de lignes 1D ne se comportent pas pareil, l'épaisseur et le glow ne
+      sont mis à l'échelle **que pour les familles filamentaires** (vector_field,
+      parametric, polar, complex — `accumulation._stroke_scale`), afin de
+      préserver la densité du voile de lignes ; les familles nuage (attractor,
+      particles, fractal) gardent des traits fins et nets. La borne de points du
+      Buddhabrot (`equations/fractal.py`) a été relevée pour suivre l'aire. À
       1600 px ou en deçà, le rendu est **inchangé au pixel près**.
 - [x] **Rendu par tuiles** (`core/engine.py::_render_tiled`) : au-delà de 4096 px
       (ou sur `--tile`), l'image est composée **bande par bande** pour borner la

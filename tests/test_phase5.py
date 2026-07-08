@@ -110,6 +110,19 @@ def test_scale_floored_at_reference():
     assert Engine._scale(ArtworkGenome(width=3200, height=1800)) > 1.0
 
 
+def test_stroke_scale_is_per_family():
+    from art_generator.renderers.accumulation import _stroke_scale
+    # Familles filamentaires : épaisseur/glow suivent la résolution.
+    assert _stroke_scale("vector_field", 2.0) == 2.0
+    assert _stroke_scale("parametric", 3.0) == 3.0
+    assert _stroke_scale("polar", 2.0) == 2.0
+    assert _stroke_scale("complex", 2.0) == 2.0
+    # Familles nuage : traits fins et nets (pas de mise à l'échelle du trait).
+    assert _stroke_scale("attractor", 2.0) == 1.0
+    assert _stroke_scale("particles", 2.0) == 1.0
+    assert _stroke_scale("fractal", 2.0) == 1.0
+
+
 def test_density_is_resolution_independent():
     """Même seed à deux résolutions ≥ référence : la part de fond reste stable.
 
