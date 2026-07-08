@@ -24,6 +24,8 @@ from __future__ import annotations
 import json
 import subprocess
 import sys
+import shutil
+import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -37,21 +39,45 @@ sys.path.insert(0, str(ROOT))
 PUBLIC = ROOT / "public"
 VENDOR = PUBLIC / "vendor"
 
-
 def _build_wheel() -> str:
-    """Construit le wheel pur-Python du package dans ``public/vendor`` et renvoie
-    son nom de fichier. ``--no-deps`` évite d'embarquer matplotlib (inutile côté
-    web : seul l'export vectoriel s'en sert, pas le rendu raster)."""
+    """Construit le wheel web sans dépendance matplotlib."""
+
     VENDOR.mkdir(parents=True, exist_ok=True)
+
     for old in VENDOR.glob("art_generator-*.whl"):
         old.unlink()
-    subprocess.run(
-        [sys.executable, "-m", "pip", "wheel", str(ROOT), "--no-deps", "-w", str(VENDOR)],
-        check=True,
-    )
+
+    with tempfile.TemporaryDirectory() as tmp:
+        tmp_path = Path(tmp)
+
+        shutil.copytree(
+            ROOT / "art_generator",
+            tmp_path / "art_generator",
+        )
+
+        shutil.copy(
+            ROOT / "pyproject.web.toml",
+            tmp_path / "pyproject.toml",
+        )
+
+        subprocess.run(
+            [
+                sys.executable,
+                "-m",
+                "pip",
+                "wheel",
+                str(tmp_path),
+                "--no-deps",
+                "-w",
+                str(VENDOR),
+            ],
+            check=True,
+        )
+
     wheels = sorted(VENDOR.glob("art_generator-*.whl"))
     if not wheels:
         raise RuntimeError("Aucun wheel produit dans public/vendor.")
+
     return wheels[-1].name
 
 

@@ -7,7 +7,7 @@
  * (WebAssembly) : aucune image n'est pré-rendue, chaque œuvre est calculée à la
  * volée côté client. Ce script se contente de :
  *   1. charger Pyodide, numpy, Pillow, puis installer le wheel du package ;
- *   2. exécuter docs/engine.py (qui expose render_preset / render_seed) ;
+ *   2. exécuter public/engine.py (qui expose render_preset / render_seed) ;
  *   3. câbler la liste des presets et le bouton « seed aléatoire ».
  *
  * Pas de saisie de seed, pas d'édition : cette UI est en lecture seule.
@@ -144,9 +144,16 @@ async function boot() {
     await pyodide.loadPackage(["numpy", "Pillow", "micropip"]);
 
     setStatus("Installation du moteur d'art…");
-    await pyodide.runPythonAsync(
-      `import micropip\nawait micropip.install(${JSON.stringify(build.wheel)}, deps=False)`
-    );
+    const wheelUrl = new URL(build.wheel, window.location.href).href;
+    console.log("Wheel URL:", wheelUrl);
+
+    const response = await fetch(wheelUrl);
+    console.log("Wheel status:", response.status, response.headers.get("content-type"));
+
+    await pyodide.runPythonAsync(`
+      import micropip
+      await micropip.install(["${wheelUrl}"], keep_going=True)
+    `);
 
     setStatus("Initialisation…");
     const engineCode = await (await fetch("engine.py")).text();
