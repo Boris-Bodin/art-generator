@@ -98,10 +98,32 @@ génome et est tiré par `generators/genome_generator.py`.
       pondéré par la densité** et met à l'échelle sur un **rayon robuste**, pour
       cadrer sur le cœur de la forme (champ `LayerGenome.framing`).
 
-## Phase 5 — Export
+## Phase 5 — Export ✅ (livré)
 
-- [ ] Export vectoriel SVG/PDF (rendu par tracés, via CairoSVG)
-- [ ] Résolutions HD/4K/8K/16K, ratio configuratble, DPI configurable, rendu par tuiles
+Cette phase élargit les débouchés du moteur sans toucher aux invariants : le
+rendu par tuiles est **identique au pixel près** au chemin simple (testé), et
+l'export vectoriel réutilise le même nuage de points projeté.
+
+- [x] **Export vectoriel SVG/PDF** (`exporters/vector.py`) « par tracés » : chaque
+      point du nuage projeté devient un disque coloré (stipple). Un *light
+      painting* additif d'un million de points ne se transpose pas fidèlement en
+      géométrie — l'export vectoriel est donc une **esthétique distincte**,
+      redimensionnable à l'infini. Réalisé via **matplotlib** (déjà une
+      dépendance) : un même code produit SVG *et* PDF, sans binaire natif (à la
+      place de CairoSVG, fragile à installer). Sous-échantillonnage déterministe
+      (plafond de points par couche) pour borner la taille du fichier.
+- [x] **Résolutions HD/4K/8K/16K, ratio & DPI configurables** (`exporters/
+      resolution.py`, options CLI `--preset`/`--ratio`/`--size`/`--dpi`) : le
+      grand côté suit le préréglage, le rapport d'aspect façonne les deux
+      dimensions.
+- [x] **Rendu par tuiles** (`core/engine.py::_render_tiled`) : au-delà de 4096 px
+      (ou sur `--tile`), l'image est composée **bande par bande** pour borner la
+      mémoire (un tampon HDR 16K en float64 pèse plusieurs Go par couche). Chaque
+      couche est projetée une fois (`renderers/accumulation.py::project_layer`),
+      une pré-passe fige le percentile de normalisation **global** (`global_hi`)
+      et les bandes sont élargies d'un halo pour un glow continu aux coutures —
+      d'où l'identité pixel-à-pixel avec le chemin simple. Le fond est lui aussi
+      calculé par bandes (`core/background.py`).
 
 ## Phase 6 — Performance
 
@@ -133,7 +155,7 @@ génome et est tiré par `generators/genome_generator.py`.
   particles.py`) sont des boucles Python sur les pas (correctes mais limitées à
   quelques centaines de milliers de points par couche) — candidates n°1 au GPU.
   L'interface `Equation.sample` est conçue pour ne pas changer lors de ce portage.
-  Traité en Phase 5.
+  Traité en Phase 6.
 - Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
-  de « surface minimale » plus fin est envisageable. Traité en Phase 5 (viabilité
+  de « surface minimale » plus fin est envisageable. Traité en Phase 6 (viabilité
   affinée).

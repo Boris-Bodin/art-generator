@@ -91,26 +91,35 @@ def _apply_noise(
     return points, values
 
 
-def render_layer(
+def project_layer(
     equation: Equation, layer: LayerGenome, width: int, height: int
-) -> tuple[np.ndarray, np.ndarray]:
-    """Rend une couche et renvoie ``(color, alpha)`` (Phase 4).
+) -> tuple[np.ndarray, np.ndarray, np.ndarray, np.ndarray]:
+    """Déroule le pipeline d'une couche jusqu'au *nuage de points projeté*.
 
-    * ``color`` ``(H, W, 3)`` — couleur *non prémultipliée* de la couche ;
-    * ``alpha`` ``(H, W)`` — couverture dans ``[0, 1]`` dérivée de la densité.
+    C'est le tronc commun réutilisé par le rendu simple, le rendu par tuiles
+    (Phase 5) et l'export vectoriel : échantillonnage → nettoyage → centrage →
+    symétrie → bruit → modulation → cadrage → couleur.
 
-    La composition sur le fond (par cet alpha) est déléguée à
-    :func:`art_generator.core.blend.composite`, ce qui découple la forme du fond :
-    les zones vides (``alpha = 0``) laissent transparaître le fond.
+    Returns:
+        ``(coords, colors, weight, radius)`` alignés (longueur ``M``) :
+
+        * ``coords`` ``(M, 2)`` — coordonnées pixel entières ``(x, y)`` dans le cadre ;
+        * ``colors`` ``(M, 3)`` — couleur *pondérée par la lumière* de chaque point ;
+        * ``weight`` ``(M,)`` — poids lumineux (densité) de chaque point ;
+        * ``radius`` ``(M,)`` — rayon pixel d'épaisseur de chaque point.
+
+        Le nuage peut être vide (``M == 0``).
     """
-    zero = (
-        np.zeros((height, width, 3), dtype=np.float64),
-        np.zeros((height, width), dtype=np.float64),
+    empty = (
+        np.empty((0, 2), dtype=np.int64),
+        np.empty((0, 3), dtype=np.float64),
+        np.empty(0, dtype=np.float64),
+        np.empty(0, dtype=np.int64),
     )
     points, values = equation.sample(layer.n_points)
     points, values = clean_points(points, values)
     if len(points) == 0:
-        return zero
+        return empty
 
     # Centrage robuste avant symétrie (rotations/miroirs corrects).
     center = np.median(points, axis=0)
@@ -125,26 +134,74 @@ def render_layer(
 
     coords, inside = fit_to_canvas(points, width, height, center_on=layer.framing)
     if len(coords) == 0:
-        return zero
+        return empty
     values = values[inside]
     weight = weight[inside]
     radius = radius[inside]
 
     colors = procedural.apply(values, layer.palette) * weight[:, None]  # (M, 3)
+    return coords, colors, weight, radius
 
-    acc_col = np.zeros((height, width, 3), dtype=np.float64)
-    acc_w = np.zeros((height, width), dtype=np.float64)
 
-    xs, ys = coords[:, 0], coords[:, 1]
+def accumulate(
+    coords: np.ndarray,
+    colors: np.ndarray | None,
+    weight: np.ndarray,
+    radius: np.ndarray,
+    width: int,
+    y0: int,
+    y1: int,
+) -> tuple[np.ndarray | None, np.ndarray]:
+    """Rasterise le nuage projeté dans la bande de lignes ``[y0, y1)``.
+
+    Le disque d'épaisseur de chaque point est éclaté par ``np.add.at``. Passer
+    ``y0=0, y1=height`` rasterise l'image entière (chemin simple) ; une bande
+    plus étroite ne matérialise qu'une portion, ce qui borne la mémoire pour les
+    très grandes résolutions (Phase 5, rendu par tuiles).
+
+    Si ``colors`` est ``None``, seule la densité ``acc_w`` est cumulée (pré-passe
+    de normalisation) — ``acc_col`` renvoyé vaut alors ``None``.
+    """
+    band_h = y1 - y0
+    acc_col = None if colors is None else np.zeros((band_h, width, 3), dtype=np.float64)
+    acc_w = np.zeros((band_h, width), dtype=np.float64)
+    if len(coords) == 0:
+        return acc_col, acc_w
+
+    xs = coords[:, 0]
+    ys = coords[:, 1] - y0
     r2 = radius * radius
     for dx, dy, d2 in _disk_offsets(int(radius.max())):
         nx = xs + dx
         ny = ys + dy
         # dans le cadre ET le point est assez épais pour couvrir cet offset
-        m = (nx >= 0) & (nx < width) & (ny >= 0) & (ny < height) & (r2 >= d2)
-        np.add.at(acc_col, (ny[m], nx[m]), colors[m])
+        m = (nx >= 0) & (nx < width) & (ny >= 0) & (ny < band_h) & (r2 >= d2)
+        if acc_col is not None:
+            np.add.at(acc_col, (ny[m], nx[m]), colors[m])
         np.add.at(acc_w, (ny[m], nx[m]), weight[m])
 
+    return acc_col, acc_w
+
+
+def render_layer(
+    equation: Equation, layer: LayerGenome, width: int, height: int
+) -> tuple[np.ndarray, np.ndarray]:
+    """Rend une couche et renvoie ``(color, alpha)`` (Phase 4).
+
+    * ``color`` ``(H, W, 3)`` — couleur *non prémultipliée* de la couche ;
+    * ``alpha`` ``(H, W)`` — couverture dans ``[0, 1]`` dérivée de la densité.
+
+    La composition sur le fond (par cet alpha) est déléguée à
+    :func:`art_generator.core.blend.composite`, ce qui découple la forme du fond :
+    les zones vides (``alpha = 0``) laissent transparaître le fond.
+    """
+    coords, colors, weight, radius = project_layer(equation, layer, width, height)
+    if len(coords) == 0:
+        return (
+            np.zeros((height, width, 3), dtype=np.float64),
+            np.zeros((height, width), dtype=np.float64),
+        )
+    acc_col, acc_w = accumulate(coords, colors, weight, radius, width, 0, height)
     return _resolve(acc_col, acc_w, layer)
 
 
@@ -154,8 +211,27 @@ def _blur(a: np.ndarray, radius: int = 6) -> np.ndarray:
     return np.asarray(img.filter(ImageFilter.GaussianBlur(radius=radius)), np.float64) / 255.0
 
 
+_AUTO = object()  # sentinelle : « calcule le percentile localement » (chemin simple)
+
+
+def global_hi(acc_w: np.ndarray, layer: LayerGenome) -> float | None:
+    """Percentile de normalisation (98e) de la luminance compressée d'une couche.
+
+    Calculé une fois sur la densité **globale** pour que le rendu par tuiles
+    normalise chaque bande à l'identique du chemin simple. Renvoie ``None`` quand
+    aucune normalisation ne s'applique (couche vide ou percentile négligeable).
+    """
+    eps = 1e-9
+    bright = np.log1p(acc_w * layer.exposure)
+    positive = bright[bright > 0]
+    if positive.size:
+        hi = float(np.percentile(positive, 98.0))
+        return hi if hi > eps else None
+    return None
+
+
 def _resolve(
-    acc_col: np.ndarray, acc_w: np.ndarray, layer: LayerGenome
+    acc_col: np.ndarray, acc_w: np.ndarray, layer: LayerGenome, hi: object = _AUTO
 ) -> tuple[np.ndarray, np.ndarray]:
     """Compression tonale HDR + halo → ``(color, alpha)`` (Phase 4).
 
@@ -163,6 +239,11 @@ def _resolve(
     vide = transparent. La couleur renvoyée est *non prémultipliée* (``avg_col``),
     de sorte que ``color * alpha`` reproduit exactement l'ancien tampon additif —
     le rendu sur fond noir reste identique au pixel près.
+
+    ``hi`` : percentile de normalisation. Par défaut (``_AUTO``) il est calculé
+    localement sur ``acc_w`` (chemin simple, comportement historique) ; le rendu
+    par tuiles passe le ``hi`` **global** de la couche pour que chaque bande soit
+    normalisée de façon cohérente (voir :func:`global_hi`).
     """
     eps = 1e-9
     # Teinte moyenne par pixel.
@@ -170,11 +251,11 @@ def _resolve(
 
     # Luminance compressée logarithmiquement puis normalisée par percentile.
     bright = np.log1p(acc_w * layer.exposure)
-    positive = bright[bright > 0]
-    if positive.size:
-        hi = np.percentile(positive, 98.0)
-        if hi > eps:
-            bright = np.clip(bright / hi, 0.0, 1.0)
+    if hi is _AUTO:
+        positive = bright[bright > 0]
+        hi = float(np.percentile(positive, 98.0)) if positive.size else None
+    if hi is not None and hi > eps:
+        bright = np.clip(bright / hi, 0.0, 1.0)
     bright = np.power(bright, 0.65)  # relèvement des tons sombres
 
     premult = avg_col * bright[..., None]  # couleur prémultipliée (= ancien layer_rgb)

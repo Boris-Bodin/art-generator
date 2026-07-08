@@ -46,14 +46,17 @@ def _layer(**kw):
 
 
 def _render(layer):
+    # Depuis la Phase 4, render_layer renvoie (color, alpha) ; l'emprise se lit
+    # sur la couverture alpha (dense = allumé, vide = transparent).
     eq = registry.build("parametric", registry.random_params("parametric", RNG(4)))
-    return accumulation.render_layer(eq, layer, 400, 400)
+    _, alpha = accumulation.render_layer(eq, layer, 400, 400)
+    return alpha
 
 
 def test_thickness_noise_increases_coverage():
     base = _render(_layer())
     thick = _render(_layer(noise_type="simplex", thickness_noise=3.0, noise_seed=1))
-    assert (thick.sum(2) > 0).sum() > (base.sum(2) > 0).sum()
+    assert (thick > 0).sum() > (base > 0).sum()
 
 
 def test_light_noise_changes_render_without_new_pixels():
@@ -62,7 +65,7 @@ def test_light_noise_changes_render_without_new_pixels():
     lit = _render(_layer(glow=0.0, noise_type="perlin", light_noise=0.6, noise_seed=2))
     assert not np.array_equal(base, lit)
     # la lumière module l'intensité, pas l'emprise : mêmes pixels allumés
-    assert (base.sum(2) > 0).sum() == (lit.sum(2) > 0).sum()
+    assert (base > 0).sum() == (lit > 0).sum()
 
 
 def test_round_trip_hsl_and_modulation(tmp_path):
