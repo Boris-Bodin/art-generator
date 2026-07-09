@@ -179,11 +179,16 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
   Reste ouvert : rendu réellement temps réel (GPU, Phase 7) pour les familles
   coûteuses (attracteurs, particules).
 
-## Phase 6+ — Bibliothèque de presets
+## Phase 6+ — Bibliothèque de presets / UI / Backgroun
 
 - [ ] **Bibliothèque de presets** (`presets/library.py`) : replace the _BUILTIN seed 
       by the reading of the *.json file
-- [ ] **Web UI** (`presets/library.py`) : add test
+- [ ] **Web UI** : add test
+- [ ] **Desktop UI** : Indique if changement has been made on the seed
+- [ ] **Desktop UI** : You can select the famille d'une couche mais pas modifier les parametre
+- [ ] **Desktop UI** : add throbber in place of artwork when rendering  
+- [ ] **Desktop UI** : in the couche list Give better namming to better selection experience  
+- [ ] **Background** : I always see blacky gradient/radial, add more colorful background
 
 ## Phase 7 — Performance
 
@@ -213,3 +218,10 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
 - Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
   de « surface minimale » plus fin est envisageable. À traiter en Phase 7
   (viabilité affinée).
+
+## Ideas
+
+- create seed from json ?
+- Some fractal without symetry are wierd 
+  - Nuage de point en cercle
+  - Perte de densité sur 3 axes cardinal en dehors du carré concentric
