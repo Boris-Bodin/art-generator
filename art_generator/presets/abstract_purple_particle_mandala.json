@@ -1,0 +1,146 @@
+{
+  "seed": 1947328337,
+  "width": 1600,
+  "height": 1600,
+  "background": "gradient",
+  "background_params": {
+    "top": [
+      0.9315413851651868,
+      0.9089069367771252,
+      0.9157761947968394
+    ],
+    "bottom": [
+      0.8284909564773693,
+      0.8498974470463578,
+      0.8633756178851507
+    ],
+    "angle": null,
+    "vignette": 0.1048756533186675
+  },
+  "layers": [
+    {
+      "equation_family": "fractal",
+      "equation_params": {
+        "variant": "julia",
+        "max_iter": 169,
+        "cx": 0.05217399960146385,
+        "cy": 0.18109850889164503,
+        "seed": 855599212
+      },
+      "n_points": 217834,
+      "palette": {
+        "mode": "hsl",
+        "name": "",
+        "offset": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "amp": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "freq": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "phase": [
+          0.0,
+          0.33,
+          0.67
+        ],
+        "hue": [
+          0.8233390788283228,
+          0.23745653827227137
+        ],
+        "sat": 0.8945872491197214,
+        "val": 0.274116242970246,
+        "stops": null
+      },
+      "color_by": "t",
+      "blend_mode": "add",
+      "opacity": 1.0,
+      "render_model": "ink",
+      "framing": "density",
+      "thickness": 2.0,
+      "glow": 0.21022809409692927,
+      "exposure": 1.7972770515800263,
+      "symmetry": "kaleidoscope",
+      "symmetry_order": 3,
+      "noise_type": "none",
+      "warp": 0.0,
+      "warp_freq": 1.5,
+      "color_noise": 0.0,
+      "light_noise": 0.0,
+      "thickness_noise": 0.0,
+      "noise_seed": 0
+    },
+    {
+      "equation_family": "vector_field",
+      "equation_params": {
+        "a": 2.232021093993977,
+        "b": 2.979908544993525,
+        "c": 0.5174199144891094,
+        "d": 2.939203715632658,
+        "dt": 0.01808563324718228,
+        "n_particles": 1639,
+        "seed": 1196858353
+      },
+      "n_points": 262669,
+      "palette": {
+        "mode": "hsl",
+        "name": "",
+        "offset": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "amp": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "freq": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "phase": [
+          0.0,
+          0.33,
+          0.67
+        ],
+        "hue": [
+          0.5549210351672332,
+          0.16871405077510793
+        ],
+        "sat": 0.8054162383875363,
+        "val": 0.31822667399446425,
+        "stops": null
+      },
+      "color_by": "t",
+      "blend_mode": "add",
+      "opacity": 0.4144835085393873,
+      "render_model": "ink",
+      "framing": "density",
+      "thickness": 1.0,
+      "glow": 0.33538822272681323,
+      "exposure": 1.4481739051217417,
+      "symmetry": "kaleidoscope",
+      "symmetry_order": 3,
+      "noise_type": "fbm",
+      "warp": 0.0,
+      "warp_freq": 0.8843621029819719,
+      "color_noise": 0.044302756345893514,
+      "light_noise": 0.0,
+      "thickness_noise": 0.0,
+      "noise_seed": 1601304135
+    }
+  ],
+  "title": "Abstract Purple Particle Mandala",
+  "comment": "",
+  "created": "2026-07-09T23:25:35.567021+00:00",
+  "version": 1
+}

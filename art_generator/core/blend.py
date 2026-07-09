@@ -56,7 +56,7 @@ def composite(
     opacity: float,
     model: str = "light",
 ) -> np.ndarray:
-    """Compose une couche ``(color, alpha)`` sur ``base`` (Phase 4).
+    """Compose une couche ``(color, alpha)`` sur ``base``.
 
     ``alpha`` ``(H, W)`` est la couverture de la couche : là où elle vaut 0, le
     fond ``base`` transparaît intégralement — la forme est ainsi *découplée* du

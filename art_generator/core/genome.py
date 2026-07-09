@@ -59,7 +59,7 @@ class LayerGenome:
     blend_mode: str = "add"  # normal | add | screen | multiply | difference
     opacity: float = 1.0
 
-    # --- modèle de rendu (Phase 4) ---
+    # --- modèle de rendu ---
     # 'light' : light painting additif (le pigment ajoute de la lumière) ;
     # 'ink'   : encre soustractive (le pigment assombrit le support).
     render_model: str = "light"  # light | ink
@@ -74,7 +74,7 @@ class LayerGenome:
     symmetry: str = "none"  # none | mirror | radial | kaleidoscope
     symmetry_order: int = 6
 
-    # --- déformation par bruit (Phase 2 / 2+) ---
+    # --- déformation par bruit ---
     noise_type: str = "none"  # none | perlin | simplex | fbm | worley
     warp: float = 0.0  # amplitude de déformation du domaine (coordonnées)
     warp_freq: float = 1.5  # fréquence spatiale du bruit de warp

@@ -1,4 +1,4 @@
-"""Export vectoriel SVG/PDF « par tracés » (Phase 5).
+"""Export vectoriel SVG/PDF « par tracés ».
 
 Le rendu matriciel est un *light painting* additif d'un million de points, dont
 le glow HDR ne se transpose pas fidèlement en géométrie vectorielle. L'export

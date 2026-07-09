@@ -1,4 +1,4 @@
-"""Aperçu rapide d'un génome (Phase 6) — logique pure, sans toolkit graphique.
+"""Aperçu rapide d'un génome — logique pure, sans toolkit graphique.
 
 L'aperçu « temps réel » de l'UI repose sur une astuce d'échelle : le nombre de
 points d'un génome est fixe, et le moteur est **indépendant de la résolution**
@@ -20,7 +20,7 @@ from PIL import Image
 from ..core.engine import Engine
 from ..core.genome import ArtworkGenome
 
-DEFAULT_MAX_SIDE = 560
+DEFAULT_MAX_SIDE = 1600
 # Plafond de points pour un aperçu **vif** pendant l'édition. Réduire le nombre de
 # points accélère le rendu au prix d'une densité un peu moindre : acceptable pour
 # une prévisualisation interactive ; l'export final utilise le génome complet.

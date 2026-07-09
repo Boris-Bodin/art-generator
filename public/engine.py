@@ -26,8 +26,8 @@ from art_generator.ui import preview
 
 # Grand côté de l'aperçu (px) et plafond de points par couche. Réglés pour un
 # compromis netteté / réactivité en WASM ; ajustables sans toucher au moteur.
-WEB_MAX_SIDE = 760
-WEB_POINT_CAP = 100_000
+WEB_MAX_SIDE = 1600
+WEB_POINT_CAP = 150_000
 
 
 def _png_b64(genome) -> str:
@@ -39,10 +39,10 @@ def _png_b64(genome) -> str:
 
 
 def presets_json() -> str:
-    """Catalogue des presets intégrés, en JSON (nom, seed, description)."""
+    """Catalogue des presets intégrés, en JSON (nom, fichier, description)."""
     return json.dumps(
         [
-            {"name": p.name, "seed": p.seed, "description": p.description}
+            {"name": p.name, "file": p.filename, "description": p.description}
             for p in library.builtin_presets()
         ]
     )

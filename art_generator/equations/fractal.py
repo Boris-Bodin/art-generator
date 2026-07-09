@@ -33,7 +33,7 @@ class Fractal(Equation):
         # Le Buddhabrot exige beaucoup de tirages candidats : seule une fraction
         # s'échappe, et chaque orbite échappée fournit plusieurs points. La borne
         # haute laisse le nuage suivre la montée en résolution (n croît avec
-        # l'aire, Phase 5) tout en bornant la mémoire de ``history`` (max_iter x
+        # l'aire) tout en bornant la mémoire de ``history`` (max_iter x
         # samples complexes) ; en deçà de la référence 1600 px elle n'est pas
         # atteinte, le rendu y est donc inchangé.
         samples = int(np.clip(n // 5, 8000, 300000))

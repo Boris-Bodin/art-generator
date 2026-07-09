@@ -1,4 +1,4 @@
-"""Interface graphique Tkinter (Phase 6) — la *vue*.
+"""Interface graphique Tkinter — la *vue*.
 
 Trois colonnes : réglages globaux (seed, presets, fichier, fond) à gauche, aperçu
 temps réel au centre, éditeur de couche à droite. Toute la logique lourde est
@@ -16,6 +16,7 @@ met à jour le canevas (stratégie « le dernier gagne »).
 from __future__ import annotations
 
 import copy
+import json
 import queue
 import random
 import threading
@@ -43,7 +44,40 @@ _FRAMINGS = ["box", "density"]
 _SYMMETRIES = ["none", "mirror", "radial", "kaleidoscope"]
 _NOISE_TYPES = ["none", "perlin", "simplex", "fbm", "worley"]
 
-_DEBOUNCE_MS = 120
+_DEBOUNCE_MS = 300
+_SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
+
+
+def _layer_detail(layer: LayerGenome) -> str:
+    params = layer.equation_params
+    if params.get("variant"):
+        return str(params["variant"])
+    if params.get("kind"):
+        return str(params["kind"])
+    if layer.equation_family == "particles":
+        emitter = params.get("emitter", {})
+        if isinstance(emitter, dict):
+            return f"emitter {emitter.get('type', 'disk')}"
+    if layer.equation_family == "vector_field":
+        return f"flow seed {params.get('seed', '?')}"
+    if layer.equation_family == "parametric":
+        return f"{params.get('a', '?')}:{params.get('c', '?')}:{params.get('f', '?')}"
+    if layer.equation_family == "polar":
+        return f"k {params.get('k1', '?')}/{params.get('k2', '?')}"
+    if layer.equation_family == "complex":
+        return f"map seed {params.get('seed', '?')}"
+    if layer.equation_family == "fractal":
+        return str(params.get("mode", "orbit"))
+    return "forme"
+
+
+def _layer_label(layer: LayerGenome, index: int, total: int) -> str:
+    """Libellé compact et informatif pour la liste des couches."""
+    detail = _layer_detail(layer)
+    symmetry = ""
+    if layer.symmetry != "none":
+        symmetry = f" · {layer.symmetry} x{layer.symmetry_order}"
+    return f"{index + 1}. {layer.equation_family} · {detail}{symmetry} ({index + 1}/{total})"
 
 
 class ArtGeneratorApp(tk.Tk):
@@ -59,15 +93,19 @@ class ArtGeneratorApp(tk.Tk):
         self.genome: ArtworkGenome = generate(seed)
         self._nav_seed = seed  # sert de graine évolutive pour la navigation
         self._current_layer = 0
+        self._dirty = False
 
         self._loading = False          # supprime les callbacks pendant un remplissage programmatique
         self._editor_widgets: list = []  # widgets de l'éditeur de couche (désactivés si aucune couche)
         self._render_job: str | None = None
         self._request_id = 0
+        self._spinner_job: str | None = None
+        self._spinner_index = 0
         self._result_q: queue.Queue = queue.Queue()
         self._photo: ImageTk.PhotoImage | None = None
 
         self._build_ui()
+        self._update_title()
         self._refresh_all()
         self.after(50, self._poll_results)
         self._schedule_render()
@@ -129,7 +167,17 @@ class ArtGeneratorApp(tk.Tk):
         entry = ttk.Entry(seed_row, textvariable=self._seed_var, width=12)
         entry.pack(side="left")
         entry.bind("<Return>", lambda _e: self._apply_seed())
-        ttk.Button(seed_row, text="◀", width=3, command=lambda: self._step_seed(-1)).pack(side="left")
+        self._dirty_badge = tk.Label(
+            seed_row,
+            text="Modifié",
+            bg="#b45309",
+            fg="white",
+            padx=6,
+            pady=1,
+            font=("", 8, "bold"),
+        )
+        self._seed_prev_btn = ttk.Button(seed_row, text="◀", width=3, command=lambda: self._step_seed(-1))
+        self._seed_prev_btn.pack(side="left")
         ttk.Button(seed_row, text="▶", width=3, command=lambda: self._step_seed(1)).pack(side="left")
 
         ttk.Button(panel, text="Seed aléatoire", command=self._random_seed).pack(fill="x", pady=2)
@@ -142,9 +190,12 @@ class ArtGeneratorApp(tk.Tk):
 
         ttk.Separator(panel).pack(fill="x", pady=6)
         ttk.Label(panel, text="Presets", font=("", 10, "bold")).pack(anchor="w")
-        self._preset_var = tk.StringVar(value=library.names()[0])
-        ttk.Combobox(panel, textvariable=self._preset_var, values=library.names(),
-                     state="readonly").pack(fill="x", pady=2)
+        preset_names = library.names()
+        self._preset_var = tk.StringVar(value=preset_names[0] if preset_names else "")
+        self._preset_combo = ttk.Combobox(
+            panel, textvariable=self._preset_var, values=preset_names, state="readonly"
+        )
+        self._preset_combo.pack(fill="x", pady=2)
         ttk.Button(panel, text="Charger le preset", command=self._load_preset).pack(fill="x", pady=2)
         ttk.Button(panel, text="Enregistrer comme preset…", command=self._save_user_preset).pack(fill="x", pady=2)
 
@@ -190,6 +241,9 @@ class ArtGeneratorApp(tk.Tk):
         self._palette_btn = ttk.Button(panel, text="Palette aléatoire", command=self._random_palette)
         self._palette_btn.pack(fill="x", pady=2)
         self._editor_widgets.append(self._palette_btn)
+        self._params_btn = ttk.Button(panel, text="Paramètres équation…", command=self._edit_params)
+        self._params_btn.pack(fill="x", pady=2)
+        self._editor_widgets.append(self._params_btn)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
         self._blend_var = self._labelled_combo(panel, "Fusion", _BLEND_MODES, lambda v: self._set_layer("blend_mode", v), register=True)
@@ -227,7 +281,9 @@ class ArtGeneratorApp(tk.Tk):
             self._bg_var.set(self.genome.background)
             self._vignette_var.set(float(self.genome.background_params.get("vignette", 0.0)))
             n = len(self.genome.layers)
-            self._layer_combo["values"] = [f"Couche {i + 1}/{n}" for i in range(n)]
+            self._layer_combo["values"] = [
+                _layer_label(layer, i, n) for i, layer in enumerate(self.genome.layers)
+            ]
             if n == 0:
                 self._current_layer = 0
                 self._layer_var.set("(aucune couche)")
@@ -235,7 +291,7 @@ class ArtGeneratorApp(tk.Tk):
                 self._delete_btn.state(["disabled"])
                 return
             self._current_layer = min(self._current_layer, n - 1)
-            self._layer_var.set(f"Couche {self._current_layer + 1}/{n}")
+            self._layer_var.set(_layer_label(self._layer, self._current_layer, n))
             self._set_editor_enabled(True)
             self._delete_btn.state(["!disabled"])  # supprimer jusqu'à 0 couche est permis
             self._refresh_layer()
@@ -272,6 +328,7 @@ class ArtGeneratorApp(tk.Tk):
         if self._loading or not self.genome.layers:
             return
         setattr(self._layer, field, value)
+        self._mark_dirty()
         self._schedule_render()
 
     def _select_layer(self) -> None:
@@ -279,7 +336,7 @@ class ArtGeneratorApp(tk.Tk):
             return
         label = self._layer_var.get()
         try:
-            self._current_layer = int(label.split()[1].split("/")[0]) - 1
+            self._current_layer = int(label.split(".", 1)[0]) - 1
         except (IndexError, ValueError):
             self._current_layer = 0
         self._loading = True
@@ -290,8 +347,33 @@ class ArtGeneratorApp(tk.Tk):
 
     # -- actions gauche -------------------------------------------------------
 
-    def _set_genome(self, genome: ArtworkGenome) -> None:
+    def _update_title(self) -> None:
+        marker = " *" if self._dirty else ""
+        self.title(f"Art Generator — éditeur{marker}")
+        if hasattr(self, "_dirty_badge"):
+            if self._dirty:
+                self._dirty_badge.pack(side="left", padx=(6, 0), before=self._seed_prev_btn)
+            else:
+                self._dirty_badge.pack_forget()
+
+    def _mark_dirty(self) -> None:
+        if self._loading:
+            return
+        self._dirty = True
+        self._update_title()
+
+    def _refresh_presets(self, select: str | None = None) -> None:
+        preset_names = library.names()
+        self._preset_combo["values"] = preset_names
+        if select in preset_names:
+            self._preset_var.set(select)
+        elif self._preset_var.get() not in preset_names:
+            self._preset_var.set(preset_names[0] if preset_names else "")
+
+    def _set_genome(self, genome: ArtworkGenome, dirty: bool = False) -> None:
         self.genome = genome
+        self._dirty = dirty
+        self._update_title()
         self._refresh_all()
         self._schedule_render()
 
@@ -323,24 +405,28 @@ class ArtGeneratorApp(tk.Tk):
             title="Œuvre vierge",
         )
         self._current_layer = 0
-        self._set_genome(blank)
+        self._set_genome(blank, dirty=True)
 
     def _mutate(self) -> None:
         self._nav_seed = (self._nav_seed + 1) % (2**31)
-        self._set_genome(navigation.mutate(self.genome, self._nav_seed))
+        self._set_genome(navigation.mutate(self.genome, self._nav_seed), dirty=True)
 
     def _reroll(self) -> None:
         self._nav_seed = (self._nav_seed + 1) % (2**31)
-        self._set_genome(navigation.reroll_equations(self.genome, self._nav_seed))
+        self._set_genome(navigation.reroll_equations(self.genome, self._nav_seed), dirty=True)
 
     def _load_preset(self) -> None:
-        self._set_genome(library.load(self._preset_var.get()))
+        if self._preset_var.get():
+            self._set_genome(library.load(self._preset_var.get()))
 
     def _save_user_preset(self) -> None:
         name = simpledialog.askstring("Preset", "Nom du preset :", parent=self)
         if not name:
             return
         path = library.save_user_preset(self.genome, name)
+        self._dirty = False
+        self._update_title()
+        self._refresh_presets(select=name)
         messagebox.showinfo("Preset", f"Enregistré :\n{path}")
 
     def _open_json(self) -> None:
@@ -357,6 +443,8 @@ class ArtGeneratorApp(tk.Tk):
                                             filetypes=[("Génome JSON", "*.json")])
         if path:
             genome_io.save(self.genome, path)
+            self._dirty = False
+            self._update_title()
 
     def _export_image(self) -> None:
         path = filedialog.asksaveasfilename(defaultextension=".png",
@@ -380,6 +468,7 @@ class ArtGeneratorApp(tk.Tk):
             self._vignette_var.set(float(self.genome.background_params.get("vignette", 0.0)))
         finally:
             self._loading = False
+        self._mark_dirty()
         self._schedule_render()
 
     def _default_background_params(self, kind: str) -> dict:
@@ -393,10 +482,11 @@ class ArtGeneratorApp(tk.Tk):
             if kind == "gradient":
                 return {"top": warm, "bottom": (0.85, 0.84, 0.8), "vignette": vignette}
             return {"inner": warm, "outer": (0.85, 0.84, 0.8), "radius": 0.9, "vignette": vignette}
-        tint = (0.04, 0.05, 0.12)
         if kind == "gradient":
-            return {"top": tint, "bottom": (0.0, 0.0, 0.0), "vignette": vignette}
-        return {"inner": tint, "outer": (0.0, 0.0, 0.0), "radius": 0.85, "vignette": vignette}
+            return {"top": (0.10, 0.07, 0.18), "bottom": (0.02, 0.08, 0.11),
+                    "angle": 35.0, "vignette": vignette}
+        return {"inner": (0.12, 0.07, 0.19), "outer": (0.02, 0.08, 0.11),
+                "radius": 0.85, "vignette": vignette}
 
     def _on_vignette(self, value: float) -> None:
         if self._loading:
@@ -404,6 +494,7 @@ class ArtGeneratorApp(tk.Tk):
         params = dict(self.genome.background_params)
         params["vignette"] = float(value)
         self.genome.background_params = params
+        self._mark_dirty()
         self._schedule_render()
 
     # -- actions droite -------------------------------------------------------
@@ -418,6 +509,8 @@ class ArtGeneratorApp(tk.Tk):
         layer.equation_family = family
         self._nav_seed = (self._nav_seed + 1) % (2**31)
         layer.equation_params = quality.viable_params(family, RNG(self._nav_seed))
+        self._mark_dirty()
+        self._refresh_all()
         self._schedule_render()
 
     def _random_palette(self) -> None:
@@ -427,7 +520,42 @@ class ArtGeneratorApp(tk.Tk):
 
         self._nav_seed = (self._nav_seed + 1) % (2**31)
         self._layer.palette = procedural.random_palette(RNG(self._nav_seed))
+        self._mark_dirty()
         self._schedule_render()
+
+    def _edit_params(self) -> None:
+        if not self.genome.layers:
+            return
+        editor = tk.Toplevel(self)
+        editor.title("Paramètres équation")
+        editor.transient(self)
+        editor.geometry("520x420")
+        editor.columnconfigure(0, weight=1)
+        editor.rowconfigure(0, weight=1)
+
+        text = tk.Text(editor, wrap="none", undo=True)
+        text.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
+        text.insert("1.0", json.dumps(self._layer.equation_params, indent=2, ensure_ascii=False))
+
+        buttons = ttk.Frame(editor, padding=(8, 0, 8, 8))
+        buttons.grid(row=1, column=0, sticky="ew")
+
+        def apply() -> None:
+            try:
+                data = json.loads(text.get("1.0", "end"))
+                if not isinstance(data, dict):
+                    raise ValueError("Les paramètres doivent être un objet JSON.")
+            except Exception as exc:
+                messagebox.showerror("Paramètres équation", str(exc), parent=editor)
+                return
+            self._layer.equation_params = data
+            self._mark_dirty()
+            self._refresh_all()
+            self._schedule_render()
+            editor.destroy()
+
+        ttk.Button(buttons, text="Appliquer", command=apply).pack(side="right")
+        ttk.Button(buttons, text="Annuler", command=editor.destroy).pack(side="right", padx=(0, 6))
 
     # -- gestion des couches --------------------------------------------------
 
@@ -456,6 +584,7 @@ class ArtGeneratorApp(tk.Tk):
         """Ajoute une couche et la sélectionne."""
         self.genome.layers.append(self._make_layer())
         self._current_layer = len(self.genome.layers) - 1
+        self._mark_dirty()
         self._refresh_all()
         self._schedule_render()
 
@@ -465,6 +594,7 @@ class ArtGeneratorApp(tk.Tk):
             return
         del self.genome.layers[self._current_layer]
         self._current_layer = max(0, self._current_layer - 1)
+        self._mark_dirty()
         self._refresh_all()
         self._schedule_render()
 
@@ -481,6 +611,8 @@ class ArtGeneratorApp(tk.Tk):
         request_id = self._request_id
         snapshot = copy.deepcopy(self.genome)  # fige l'état pour le thread de travail
         self._status.configure(text="Rendu…")
+        self._start_spinner(request_id)
+        self._photo = None
 
         def work() -> None:
             start = time.perf_counter()
@@ -493,17 +625,43 @@ class ArtGeneratorApp(tk.Tk):
 
         threading.Thread(target=work, daemon=True).start()
 
+    def _start_spinner(self, request_id: int) -> None:
+        self._stop_spinner()
+        self._spinner_index = 0
+        self._animate_spinner(request_id)
+
+    def _animate_spinner(self, request_id: int) -> None:
+        if request_id != self._request_id:
+            return
+        frame = _SPINNER_FRAMES[self._spinner_index % len(_SPINNER_FRAMES)]
+        self._spinner_index += 1
+        self._canvas.configure(
+            image="",
+            text=f"{frame} Rendu…",
+            foreground="#f8fafc",
+            background="#111111",
+            font=("", 16, "bold"),
+            compound="center",
+        )
+        self._spinner_job = self.after(90, lambda: self._animate_spinner(request_id))
+
+    def _stop_spinner(self) -> None:
+        if self._spinner_job is not None:
+            self.after_cancel(self._spinner_job)
+            self._spinner_job = None
+
     def _poll_results(self) -> None:
         try:
             while True:
                 request_id, img, elapsed, exc = self._result_q.get_nowait()
                 if request_id != self._request_id:
                     continue  # rendu périmé (le dernier gagne)
+                self._stop_spinner()
                 if exc is not None:
                     self._status.configure(text=f"Erreur : {exc}")
                     continue
                 self._photo = ImageTk.PhotoImage(img)
-                self._canvas.configure(image=self._photo)
+                self._canvas.configure(image=self._photo, text="")
                 self._status.configure(
                     text=f"{self.genome.width}×{self.genome.height} · aperçu "
                     f"{img.width}×{img.height} · {elapsed:.2f}s"

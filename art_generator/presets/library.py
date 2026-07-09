@@ -1,12 +1,10 @@
-"""Bibliothèque de presets (Phase 6).
+"""Bibliothèque de presets.
 
 Deux niveaux :
 
-* **Presets intégrés** — un petit catalogue de seeds curées, chacune nommée et
-  décrite. Comme une seed → un génome → une image (invariant du moteur), un preset
-  intégré n'a besoin de stocker que sa seed : il se reconstruit à l'identique via
-  :func:`~art_generator.generators.genome_generator.generate`. C'est le point de
-  départ de la navigation dans l'espace des génomes (:mod:`generators.navigation`).
+* **Presets intégrés** — un petit catalogue de génomes JSON curés, chacun nommé
+  et décrit. Ils passent par la même sérialisation que les œuvres utilisateur, ce
+  qui permet de livrer des presets réellement édités plutôt que de simples seeds.
 * **Presets utilisateur** — des génomes *arbitraires* (donc possiblement édités à
   la main dans l'UI, hors de la portée d'une seed) enregistrés en JSON dans un
   dossier dédié, via la sérialisation standard (:mod:`exporters.genome_io`).
@@ -15,68 +13,93 @@ Deux niveaux :
 from __future__ import annotations
 
 import re
+import copy
 from dataclasses import dataclass
 from pathlib import Path
 
 from ..core.genome import ArtworkGenome
 from ..exporters import genome_io
-from ..generators.genome_generator import generate
 
 
 @dataclass(frozen=True)
 class Preset:
-    """Preset intégré : une seed nommée et décrite."""
+    """Preset JSON nommé et décrit."""
 
     name: str
-    seed: int
+    path: Path
     description: str
+
+    @property
+    def filename(self) -> str:
+        """Nom du fichier, pour les manifests web et les tests."""
+        return self.path.name
 
     def build(self, width: int = 1600, height: int = 1600) -> ArtworkGenome:
         """Reconstruit le génome du preset à la résolution voulue."""
-        genome = generate(self.seed, width=width, height=height)
+        genome = genome_io.load(self.path)
+        genome.width = width
+        genome.height = height
         genome.title = self.name
         return genome
 
 
-# Catalogue intégré : seeds curées couvrant un éventail de familles et d'ambiances.
-# Chaque seed produit une œuvre viable (garanti par le contrôle de qualité).
-_BUILTIN: tuple[Preset, ...] = (
-    Preset("Aurora", 42, "Voile de lignes lumineuses, palette froide."),
-    Preset("Ember", 7, "Attracteur dense aux teintes chaudes."),
-    Preset("Nebula", 128, "Nuage étoilé, symétrie radiale."),
-    Preset("Tide", 2024, "Champ de vecteurs fluide, dégradé océan."),
-    Preset("Filament", 99, "Trajectoires filamentaires fines."),
-    Preset("Bloom", 314, "Floraison symétrique en kaléidoscope."),
-    Preset("Ink Study", 5, "Encre soustractive sur papier clair."),
-    Preset("Vortex", 777, "Tourbillon de particules."),
-    Preset("Lattice", 256, "Motif structuré, harmonie complémentaire."),
-    Preset("Drift", 1618, "Dérive douce, bruit de warp."),
-    Preset("Corona", 88, "Halo radial, forte exposition."),
-    Preset("Quartz", 4096, "Facettes nettes, palette minérale."),
-)
+def _builtin_dir() -> Path:
+    """Dossier contenant les presets JSON embarqués dans le package."""
+    return Path(__file__).resolve().parent
 
-_BY_NAME: dict[str, Preset] = {p.name: p for p in _BUILTIN}
+
+def _preset_from_path(path: Path) -> Preset:
+    genome = genome_io.load(path)
+    title = genome.title.strip()
+    if title and title != path.stem:
+        name = title
+    else:
+        name = path.stem.replace("_", " ").capitalize()
+    description = genome.comment.strip() if genome.comment else f"Preset JSON : {path.name}"
+    return Preset(name=name, path=path, description=description)
+
+
+def _load_presets_from(directory: Path) -> tuple[Preset, ...]:
+    """Charge les presets JSON d'un dossier."""
+    if not directory.exists():
+        return ()
+    return tuple(_preset_from_path(path) for path in sorted(directory.glob("*.json")))
 
 
 def builtin_presets() -> tuple[Preset, ...]:
-    """Catalogue des presets intégrés."""
-    return _BUILTIN
+    """Catalogue des presets embarqués dans le package."""
+    return _load_presets_from(_builtin_dir())
+
+
+def user_presets(directory: str | Path | None = None) -> tuple[Preset, ...]:
+    """Catalogue des presets utilisateur."""
+    directory = Path(directory) if directory is not None else default_dir()
+    return _load_presets_from(directory)
+
+
+def presets(directory: str | Path | None = None) -> tuple[Preset, ...]:
+    """Catalogue des presets JSON disponibles pour l'UI."""
+    found: dict[str, Preset] = {}
+    for preset in (*builtin_presets(), *user_presets(directory)):
+        found.setdefault(preset.name, preset)
+    return tuple(found.values())
 
 
 def names() -> list[str]:
-    """Noms des presets intégrés (ordre du catalogue)."""
-    return [p.name for p in _BUILTIN]
+    """Noms des presets disponibles."""
+    return [p.name for p in presets()]
 
 
 def get(name: str) -> Preset:
-    """Preset intégré par son nom."""
-    if name not in _BY_NAME:
+    """Preset par son nom."""
+    by_name = {p.name: p for p in presets()}
+    if name not in by_name:
         raise KeyError(f"Preset inconnu : {name!r}")
-    return _BY_NAME[name]
+    return by_name[name]
 
 
 def load(name: str, width: int = 1600, height: int = 1600) -> ArtworkGenome:
-    """Raccourci : nom de preset intégré → génome prêt à rendre."""
+    """Raccourci : nom de preset → génome prêt à rendre."""
     return get(name).build(width=width, height=height)
 
 
@@ -99,7 +122,9 @@ def save_user_preset(
     """Enregistre un génome comme preset utilisateur (JSON) et renvoie son chemin."""
     directory = Path(directory) if directory is not None else default_dir()
     path = directory / f"{_slugify(name)}.json"
-    genome_io.save(genome, path)
+    saved = copy.deepcopy(genome)
+    saved.title = name
+    genome_io.save(saved, path)
     return path
 
 

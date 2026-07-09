@@ -5,7 +5,7 @@ Pyodide (CPython + numpy + Pillow compilés en WebAssembly). Elle n'a donc besoi
 que de trois choses côté build :
 
 * le **wheel** du package (pur-Python), chargé dans Pyodide par ``micropip`` ;
-* ``presets.json`` — le catalogue des presets intégrés (nom, seed, description),
+* ``presets.json`` — le catalogue des presets intégrés (nom, fichier, description),
   pour afficher la liste sans attendre le démarrage de Pyodide ;
 * ``build.json`` — le nom du wheel produit et la version de Pyodide ciblée, pour
   découpler le front-end du numéro de version.
@@ -86,7 +86,7 @@ def _write_presets() -> int:
     from art_generator.presets import library
 
     presets = [
-        {"name": p.name, "seed": p.seed, "description": p.description}
+        {"name": p.name, "file": p.filename, "description": p.description}
         for p in library.builtin_presets()
     ]
     (PUBLIC / "presets.json").write_text(

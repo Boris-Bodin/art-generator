@@ -88,9 +88,9 @@ formes viables, même mise en scène).
 ### Web UI
 
 ```bash
+python scripts/build_web.py
 python -m http.server 8000 --directory public
 ```
-
 
 ### Planche-contact
 
@@ -139,4 +139,4 @@ Voir [ROADMAP.md](ROADMAP.md). **Livré** : bruit (Perlin/Simplex/fBm/Worley),
 champs de vecteurs, domaines complexes, fractales, particules, composition par
 alpha & encre, export vectoriel (SVG/PDF), résolutions HD→16K par tuiles,
 interface graphique & navigation. **À venir** : performance & accélération GPU
-(Phase 7), animation et export temporel GIF/MP4 (Phase 8).
+performance & accélération GPU, animation et export temporel GIF/MP4.

@@ -1,4 +1,4 @@
-"""Résolutions de sortie : préréglages, rapport d'aspect, dimensions (Phase 5).
+"""Résolutions de sortie : préréglages, rapport d'aspect, dimensions.
 
 Le génome ne connaît que ``width``/``height`` en pixels. Ce module traduit des
 intentions de haut niveau (« 4K en 16:9 ») en un couple ``(width, height)`` que

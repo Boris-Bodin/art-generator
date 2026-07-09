@@ -38,7 +38,7 @@ _LINEAR_POINT_FAMILIES = frozenset({"vector_field"})
 
 
 def _stroke_scale(family: str, scale: float) -> float:
-    """Facteur d'échelle des traits (épaisseur/glow) selon la famille (Phase 5)."""
+    """Facteur d'échelle des traits (épaisseur/glow) selon la famille."""
     return scale if family in _STROKE_SCALE_FAMILIES else 1.0
 
 
@@ -81,13 +81,13 @@ def _disk_area(radius: int) -> int:
 def _point_modulation(
     points: np.ndarray, layer: LayerGenome, stroke_scale: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Poids lumineux et rayon d'épaisseur par point, pilotés par bruit (Phase 2+).
+    """Poids lumineux et rayon d'épaisseur par point, pilotés par bruit.
 
     Retourne ``(weight, radius)`` alignés sur ``points`` :
       * ``weight`` module la contribution lumineuse de chaque point ;
       * ``radius`` (rayon pixel entier) module localement l'épaisseur du trait.
 
-    ``stroke_scale`` (Phase 5) épaissit les traits proportionnellement à la
+    ``stroke_scale`` épaissit les traits proportionnellement à la
     résolution pour les familles filamentaires (voir :func:`_stroke_scale`) ;
     il vaut 1 pour les familles nuage (traits fins et nets). Le poids est alors
     **normalisé par l'aire du disque** (facteur ``aire(rayon réf)/aire(rayon
@@ -153,10 +153,10 @@ def project_layer(
     """Déroule le pipeline d'une couche jusqu'au *nuage de points projeté*.
 
     C'est le tronc commun réutilisé par le rendu simple, le rendu par tuiles
-    (Phase 5) et l'export vectoriel : échantillonnage → nettoyage → centrage →
+    et l'export vectoriel : échantillonnage → nettoyage → centrage →
     symétrie → bruit → modulation → cadrage → couleur.
 
-    ``scale`` (facteur linéaire de résolution, Phase 5) rend le rendu
+    ``scale`` (facteur linéaire de résolution) rend le rendu
     *indépendant de la résolution* : le nombre de points croît pour garder la
     densité par pixel constante — avec l'aire, ou linéairement pour les supports
     1D purs (:func:`_point_count`). Les familles filamentaires épaississent en plus
@@ -190,7 +190,7 @@ def project_layer(
     points = points - center
     points, values = apply_symmetry(points, values, layer.symmetry, layer.symmetry_order)
 
-    # Déformation du domaine et/ou modulation couleur par bruit (Phase 2).
+    # Déformation du domaine et/ou modulation couleur par bruit.
     if layer.noise_type != "none":
         points, values = _apply_noise(points, values, layer)
 
@@ -221,7 +221,7 @@ def accumulate(
     Le disque d'épaisseur de chaque point est éclaté par ``np.add.at``. Passer
     ``y0=0, y1=height`` rasterise l'image entière (chemin simple) ; une bande
     plus étroite ne matérialise qu'une portion, ce qui borne la mémoire pour les
-    très grandes résolutions (Phase 5, rendu par tuiles).
+    très grandes résolutions (rendu par tuiles).
 
     Si ``colors`` est ``None``, seule la densité ``acc_w`` est cumulée (pré-passe
     de normalisation) — ``acc_col`` renvoyé vaut alors ``None``.
@@ -250,7 +250,7 @@ def accumulate(
 def render_layer(
     equation: Equation, layer: LayerGenome, width: int, height: int, scale: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Rend une couche et renvoie ``(color, alpha)`` (Phase 4).
+    """Rend une couche et renvoie ``(color, alpha)``.
 
     * ``color`` ``(H, W, 3)`` — couleur *non prémultipliée* de la couche ;
     * ``alpha`` ``(H, W)`` — couverture dans ``[0, 1]`` dérivée de la densité.
@@ -303,7 +303,7 @@ def _resolve(
     hi: object = _AUTO,
     scale: float = 1.0,
 ) -> tuple[np.ndarray, np.ndarray]:
-    """Compression tonale HDR + halo → ``(color, alpha)`` (Phase 4).
+    """Compression tonale HDR + halo → ``(color, alpha)``.
 
     La luminance compressée sert de **couverture** (``alpha``) : dense = opaque,
     vide = transparent. La couleur renvoyée est *non prémultipliée* (``avg_col``),
@@ -315,7 +315,7 @@ def _resolve(
     par tuiles passe le ``hi`` **global** de la couche pour que chaque bande soit
     normalisée de façon cohérente (voir :func:`global_hi`).
 
-    ``scale`` : facteur de trait (Phase 5) élargissant le rayon du halo (glow)
+    ``scale`` : facteur de trait élargissant le rayon du halo (glow)
     proportionnellement pour les familles filamentaires. À ``scale == 1`` le rayon
     vaut 6 px (identique à l'historique).
     """

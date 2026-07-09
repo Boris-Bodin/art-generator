@@ -1,4 +1,4 @@
-"""Interface graphique et navigation (Phase 6).
+"""Interface graphique et navigation.
 
 Le sous-module sépare la **logique** (calcul d'aperçu, indépendant de tout
 toolkit — :mod:`art_generator.ui.preview`) de la **vue** Tkinter

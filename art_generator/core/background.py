@@ -1,6 +1,6 @@
 """Génération du fond de l'œuvre.
 
-Depuis la Phase 4, le compositing par alpha (``core/blend.py::composite``) laisse
+Le compositing par alpha (``core/blend.py::composite``) laisse
 transparaître le fond dans les zones vides des couches : le fond redevient donc
 un vrai élément de composition. On propose des fonds unis, des dégradés
 **directionnels** et **radiaux**, ainsi qu'une **vignette** optionnelle
@@ -20,7 +20,7 @@ def make_background(
     """Renvoie le tampon de fond ``(H, W, 3)`` dans ``[0, 1]``.
 
     ``y0``/``y1`` restreignent le calcul aux lignes ``[y0, y1)`` (rendu par
-    tuiles, Phase 5) : la bande produite est **identique** à la tranche
+    tuiles) : la bande produite est **identique** à la tranche
     correspondante du fond complet, car dégradés, radial et vignette s'appuient
     sur des coordonnées normalisées par la hauteur *totale* ``H``.
     """

@@ -1,4 +1,4 @@
-"""Navigation dans l'espace des génomes (Phase 6).
+"""Navigation dans l'espace des génomes.
 
 Une œuvre = un génome (voir :mod:`art_generator.core.genome`). Explorer l'espace
 des œuvres revient donc à se déplacer dans l'espace des génomes. Ce module fournit

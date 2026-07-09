@@ -4,7 +4,11 @@ La Phase 1 pose des fondations propres et un moteur qui produit déjà des œuvr
 Les phases suivantes enrichissent le langage artistique sans casser l'interface
 (génome sérialisable, registre d'équations, modèle « nuage de points »).
 
-## Phase 1 — Fondations ✅ (livré)
+## MVP
+
+
+
+### Phase 1 — Fondations ✅ (livré)
 
 - [x] `ArtworkGenome` sérialisable (JSON), reproductible au pixel près
 - [x] RNG déterministe (PCG64)
@@ -18,7 +22,7 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
 - [x] Export PNG/TIFF, CLI, planche-contact
 - [x] Suite de tests (déterminisme, round-trip, viabilité)
 
-## Phase 2 — Richesse du langage ✅ (livré)
+### Phase 2 — Richesse du langage ✅ (livré)
 
 - [x] **Bruit** (`noise/fields.py`) : Perlin, fBm (somme fractale), Worley,
       appliqué en déformation du domaine (warp) et en modulation des couleurs
@@ -32,7 +36,7 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
       points ; famille parmi d'autres, non centrale
 - [x] Palettes **HSV** et **dégradés multi-arrêts** (`palettes/procedural.py`)
 
-## Phase 2+ — Compléments ✅ (livré)
+### Phase 2+ — Compléments ✅ (livré)
 
 - [x] Bruit **Simplex** 2D véritable (`noise/fields.py::simplex2d`), grille de
       triangles sans artefacts directionnels
@@ -48,7 +52,7 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
 
   Reste ouvert : bruit 3D pour l'animation temporelle (Phase 4).
 
-## Phase 3 — Système de particules ✅ (livré)
+### Phase 3 — Système de particules ✅ (livré)
 
 - [x] **Particules** (`equations/particles.py`) avec position, vitesse, durée de
       vie et âge ; simulation pas à pas (intégration d'Euler) enregistrant la
@@ -68,7 +72,7 @@ Les phases suivantes enrichissent le langage artistique sans casser l'interface
   Reste ouvert : advection GPU (voir dette technique) et taille/opacité par
   particule variables dans le temps (Phase 4, animation).
 
-## Phase 4 — Composition & fonds ✅ (livré)
+### Phase 4 — Composition & fonds ✅ (livré)
 
 Le rendu était un « light painting » **additif** : chaque couche valait noir là
 où il n'y avait pas de forme, rendant le fond noir quasi obligatoire. Cette phase
@@ -98,7 +102,7 @@ génome et est tiré par `generators/genome_generator.py`.
       pondéré par la densité** et met à l'échelle sur un **rayon robuste**, pour
       cadrer sur le cœur de la forme (champ `LayerGenome.framing`).
 
-## Phase 5 — Export ✅ (livré)
+### Phase 5 — Export ✅ (livré)
 
 Cette phase élargit les débouchés du moteur sans toucher aux invariants : le
 rendu par tuiles est **identique au pixel près** au chemin simple (testé), et
@@ -146,7 +150,9 @@ l'export vectoriel réutilise le même nuage de points projeté.
       d'où l'identité pixel-à-pixel avec le chemin simple. Le fond est lui aussi
       calculé par bandes (`core/background.py`).
 
-## Phase 6 — Interface & navigation ✅ (livré)
+## V1
+
+### Phase 1 — Interface & navigation ✅ (livré)
 
 Cette phase donne un **atelier interactif** au moteur sans toucher aux invariants :
 la logique (aperçu, navigation, presets) vit dans des modules **sans toolkit**,
@@ -179,18 +185,18 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
   Reste ouvert : rendu réellement temps réel (GPU, Phase 7) pour les familles
   coûteuses (attracteurs, particules).
 
-## Phase 6+ — Bibliothèque de presets / UI / Backgroun
+### Phase 2 — UX
 
-- [ ] **Bibliothèque de presets** (`presets/library.py`) : replace the _BUILTIN seed 
+- [x] **Bibliothèque de presets** (`presets/library.py`) : replace the _BUILTIN seed 
       by the reading of the *.json file
-- [ ] **Web UI** : add test
-- [ ] **Desktop UI** : Indique if changement has been made on the seed
-- [ ] **Desktop UI** : You can select the famille d'une couche mais pas modifier les parametre
-- [ ] **Desktop UI** : add throbber in place of artwork when rendering  
-- [ ] **Desktop UI** : in the couche list Give better namming to better selection experience  
-- [ ] **Background** : I always see blacky gradient/radial, add more colorful background
+- [x] **Web UI** : add test
+- [x] **Desktop UI** : Indique if changement has been made on the seed
+- [x] **Desktop UI** : You can select the famille d'une couche mais pas modifier les parametre
+- [x] **Desktop UI** : add throbber in place of artwork when rendering  
+- [x] **Desktop UI** : in the couche list Give better namming to better selection experience  
+- [x] **Background** : I always see blacky gradient/radial, add more colorful background
 
-## Phase 7 — Performance
+### Phase 3 — Performance
 
 - [ ] Optimisation : vectorisation poussée, multiprocessing
 - [ ] Accélération GPU (OpenGL/Vulkan/GLSL, Numba/CUDA) sur les points chauds
@@ -199,7 +205,22 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
       rejeter les formes quasi 1D que le contrôle actuel laisse passer
       (`generators/quality.py`).
 
-## Phase 8 — Animation
+### Phase 4 - Stabilization
+
+- [ ] Desktop UI : faire un vrai formulaire pour les paramètres d'équation (types,
+  bornes, champs imbriqués) au lieu de l'éditeur JSON temporaire.
+- [ ] Some fractal without symetry are wierd 
+  - Nuage de point en cercle
+  - Perte de densité sur 3 axes cardinal en dehors du carré concentric
+- [ ] create seed from json ?
+- [ ] The preset saved need to be put in the presets package neer the built in one, 
+  to be include in the next commit to be visible on the Web UI 
+- [ ] Desktop UI select resolution/ratio, pouvoir export 
+- [ ] Web App: better mobile responsive view 
+
+## V2
+
+### Phase 1 — Animation
 
 - [ ] Animation des paramètres, couleurs, particules, équations (keyframes)
 - [ ] **Bruit 3D** (dimension temporelle) pour une animation cohérente des
@@ -210,18 +231,11 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
 
 ## Dette technique connue
 
-- L'itération des attracteurs **et l'advection des particules** (`equations/
+- [ ] L'itération des attracteurs **et l'advection des particules** (`equations/
   particles.py`) sont des boucles Python sur les pas (correctes mais limitées à
   quelques centaines de milliers de points par couche) — candidates n°1 au GPU.
   L'interface `Equation.sample` est conçue pour ne pas changer lors de ce portage.
   À traiter en Phase 7.
-- Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
+- [ ] Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
   de « surface minimale » plus fin est envisageable. À traiter en Phase 7
   (viabilité affinée).
-
-## Ideas
-
-- create seed from json ?
-- Some fractal without symetry are wierd 
-  - Nuage de point en cercle
-  - Perte de densité sur 3 axes cardinal en dehors du carré concentric

@@ -1,6 +1,6 @@
 """Système de particules : émetteurs, forces, turbulence.
 
-Phase 3 de la feuille de route. Un ensemble de particules est simulé pas à pas :
+Un ensemble de particules est simulé pas à pas :
 chaque particule possède **position, vitesse, durée de vie, âge**. À chaque pas
 on lui applique des **forces** (gravité, attraction/répulsion centrale, tourbillon,
 traînée) et une **turbulence** issue d'un champ de bruit *curl* (sans divergence,

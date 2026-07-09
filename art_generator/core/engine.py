@@ -8,7 +8,7 @@ Deux chemins de rendu, à sortie **identique au pixel près** :
 
 * le chemin **simple** matérialise l'image entière d'un bloc (petites et
   moyennes tailles) ;
-* le chemin **par tuiles** (Phase 5) compose l'image bande par bande pour borner
+* le chemin **par tuiles** compose l'image bande par bande pour borner
   la mémoire aux très grandes résolutions (8K/16K) — un tampon HDR 16K en
   float64 pèserait plusieurs gigaoctets par couche.
 """
@@ -106,7 +106,7 @@ class Engine:
         arr = (np.clip(canvas, 0.0, 1.0) * 255.0 + 0.5).astype(np.uint8)
         return Image.fromarray(arr, mode="RGB")
 
-    # -- chemin par tuiles (Phase 5) -----------------------------------------
+    # -- chemin par tuiles ----------------------------------------------------
 
     def _render_tiled(self, genome: ArtworkGenome, tile_height: int) -> Image.Image:
         """Compose l'image bande par bande à mémoire bornée.

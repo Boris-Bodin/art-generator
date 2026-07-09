@@ -9,6 +9,8 @@ famille tout en garantissant leur unicité.
 
 from __future__ import annotations
 
+import colorsys
+
 from ..core.genome import ArtworkGenome, LayerGenome, PaletteGenome
 from ..core.rng import RNG
 from ..equations import registry
@@ -84,21 +86,30 @@ def _ink_palette(rng: RNG) -> PaletteGenome:
     )
 
 
+def _dark_color_pair(rng: RNG) -> tuple[tuple[float, float, float], tuple[float, float, float]]:
+    """Deux couleurs sombres mais saturées pour les fonds light-painting."""
+    hue = rng.uniform(0.0, 1.0)
+    accent_hue = (hue + rng.choice([0.08, 0.14, 0.5])) % 1.0
+    inner = colorsys.hsv_to_rgb(hue, rng.uniform(0.45, 0.85), rng.uniform(0.12, 0.24))
+    outer = colorsys.hsv_to_rgb(accent_hue, rng.uniform(0.35, 0.75), rng.uniform(0.025, 0.075))
+    return inner, outer
+
+
 def _light_background(rng: RNG) -> tuple[str, dict]:
     """Fond pour le light painting additif : sombre, éventuellement dégradé/radial."""
     kind = rng.choice(["black", "gradient", "radial"], weights=[0.4, 0.3, 0.3])
     vignette = rng.uniform(0.15, 0.45) if rng.chance(0.5) else 0.0
     if kind == "black":
         return "black", {"vignette": vignette}
-    tint = (rng.uniform(0.0, 0.12), rng.uniform(0.0, 0.12), rng.uniform(0.02, 0.16))
+    inner, outer = _dark_color_pair(rng)
     if kind == "gradient":
         return "gradient", {
-            "top": tint, "bottom": (0.0, 0.0, 0.0),
+            "top": inner, "bottom": outer,
             "angle": rng.uniform(0.0, 180.0) if rng.chance(0.6) else None,
             "vignette": vignette,
         }
     return "radial", {
-        "inner": tint, "outer": (0.0, 0.0, 0.0),
+        "inner": inner, "outer": outer,
         "radius": rng.uniform(0.6, 0.95),
         "vignette": vignette,
     }
@@ -132,7 +143,7 @@ def generate(
     """Construit un génome reproductible pour ``seed``."""
     rng = RNG(seed)
 
-    # Médium (Phase 4) : light painting additif (majoritaire) ou encre soustractive.
+    # Médium : light painting additif (majoritaire) ou encre soustractive.
     ink = rng.chance(0.25)
     render_model = "ink" if ink else "light"
 
@@ -145,7 +156,7 @@ def generate(
     symmetry = rng.choice(_SYMMETRIES, weights=[0.4, 0.2, 0.25, 0.15])
     symmetry_order = rng.randint(3, 8)
 
-    # Cadrage (Phase 4d) : la moitié des œuvres cadre sur le cœur dense de la forme.
+    # Cadrage : la moitié des œuvres cadre sur le cœur dense de la forme.
     framing = rng.choice(["box", "density"], weights=[0.55, 0.45])
 
     layers: list[LayerGenome] = []
