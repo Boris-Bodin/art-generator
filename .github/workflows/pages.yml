@@ -38,6 +38,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -e .
 
+      - name: Run the test
+        run: pytest
+
       - name: Build web assets
         run: python scripts/build_web.py
 
