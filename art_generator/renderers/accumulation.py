@@ -225,6 +225,11 @@ def accumulate(
 
     Si ``colors`` est ``None``, seule la densité ``acc_w`` est cumulée (pré-passe
     de normalisation) — ``acc_col`` renvoyé vaut alors ``None``.
+
+    L'éclatement se fait via :func:`numpy.bincount` sur un index de pixel aplati
+    (nettement plus rapide que ``numpy.ufunc.at``, non bufferisé) ; l'ordre de
+    parcours (offset par offset) est préservé, si bien que le chemin simple et le
+    rendu par tuiles restent **identiques au pixel près**.
     """
     band_h = y1 - y0
     acc_col = None if colors is None else np.zeros((band_h, width, 3), dtype=np.float64)
@@ -235,14 +240,20 @@ def accumulate(
     xs = coords[:, 0]
     ys = coords[:, 1] - y0
     r2 = radius * radius
+    minlength = band_h * width
+    acc_w_flat = acc_w.reshape(-1)
+    acc_col_flat = None if acc_col is None else acc_col.reshape(-1, 3)
     for dx, dy, d2 in _disk_offsets(int(radius.max())):
         nx = xs + dx
         ny = ys + dy
         # dans le cadre ET le point est assez épais pour couvrir cet offset
         m = (nx >= 0) & (nx < width) & (ny >= 0) & (ny < band_h) & (r2 >= d2)
-        if acc_col is not None:
-            np.add.at(acc_col, (ny[m], nx[m]), colors[m])
-        np.add.at(acc_w, (ny[m], nx[m]), weight[m])
+        flat = ny[m] * width + nx[m]
+        acc_w_flat += np.bincount(flat, weights=weight[m], minlength=minlength)
+        if acc_col_flat is not None:
+            cm = colors[m]
+            for c in range(3):
+                acc_col_flat[:, c] += np.bincount(flat, weights=cm[:, c], minlength=minlength)
 
     return acc_col, acc_w
 

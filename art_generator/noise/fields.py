@@ -12,12 +12,29 @@ Fournis :
 
 from __future__ import annotations
 
+from functools import lru_cache
+
 import numpy as np
 
 _GRAD2 = np.array(
     [[1, 1], [-1, 1], [1, -1], [-1, -1], [1, 0], [-1, 0], [0, 1], [0, -1]],
     dtype=np.float64,
 )
+
+
+@lru_cache(maxsize=256)
+def _permutation(seed: int) -> np.ndarray:
+    """Table de permutation (longueur 512) mémoïsée par seed.
+
+    La table ne dépend que de la seed ; la recalculer à chaque appel de bruit
+    (jusqu'à ``octaves`` fois par ``fbm``, à chaque pas de la turbulence des
+    particules) est du gaspillage. Le cache renvoie **le même tableau** pour une
+    seed donnée : résultat identique au pixel près. Le tableau est traité comme
+    immuable (jamais modifié en place par les appelants).
+    """
+    rng = np.random.default_rng(seed)
+    perm = rng.permutation(256).astype(np.int64)
+    return np.concatenate((perm, perm))
 
 
 def _fade(t: np.ndarray) -> np.ndarray:
@@ -30,9 +47,7 @@ def _lerp(a: np.ndarray, b: np.ndarray, t: np.ndarray) -> np.ndarray:
 
 def perlin2d(x: np.ndarray, y: np.ndarray, seed: int) -> np.ndarray:
     """Bruit de Perlin 2D vectorisé. Résultat dans ~``[-1, 1]``."""
-    rng = np.random.default_rng(seed)
-    perm = rng.permutation(256).astype(np.int64)
-    perm = np.concatenate((perm, perm))
+    perm = _permutation(seed)
 
     xi = np.floor(x).astype(np.int64)
     yi = np.floor(y).astype(np.int64)
@@ -45,8 +60,8 @@ def perlin2d(x: np.ndarray, y: np.ndarray, seed: int) -> np.ndarray:
 
     def grad(ix, iy, dx, dy):
         idx = perm[(perm[ix & 255] + (iy & 255)) & 255] & 7
-        g = _GRAD2[idx]
-        return g[..., 0] * dx + g[..., 1] * dy
+        # Indexation directe des composantes : évite le tableau (N, 2) temporaire.
+        return _GRAD2[idx, 0] * dx + _GRAD2[idx, 1] * dy
 
     n00 = grad(xi, yi, xf, yf)
     n10 = grad(xi + 1, yi, xf - 1, yf)
@@ -118,9 +133,7 @@ def simplex2d(x: np.ndarray, y: np.ndarray, seed: int) -> np.ndarray:
     de triangles : moins d'artefacts directionnels, gradient continu, coût moindre
     en dimensions supérieures.
     """
-    rng = np.random.default_rng(seed)
-    perm = rng.permutation(256).astype(np.int64)
-    perm = np.concatenate((perm, perm))  # longueur 512, évite les modulos
+    perm = _permutation(seed)  # longueur 512, évite les modulos
     perm_mod12 = perm % 12
 
     s = (x + y) * _F2

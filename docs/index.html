@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Art Generator — galerie</title>
+  <meta name="description" content="Galerie d'art génératif mathématique. Le moteur Python tourne dans votre navigateur via Pyodide (WebAssembly)." />
+  <link rel="stylesheet" href="style.css" />
+  <!-- Pyodide : la version DOIT correspondre à PYODIDE_VERSION de scripts/build_web.py -->
+  <script src="https://cdn.jsdelivr.net/pyodide/v0.27.2/full/pyodide.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <h1>Art&nbsp;Generator</h1>
+    <p class="tagline">Œuvres génératives — une&nbsp;seed → un&nbsp;génome → une&nbsp;image. Rendu 100&nbsp;% dans votre navigateur.</p>
+  </header>
+
+  <main class="layout">
+    <aside class="sidebar">
+      <section>
+        <h2>Aléatoire</h2>
+        <button id="btn-random" class="primary" disabled>🎲 Nouvelle seed aléatoire</button>
+      </section>
+      <section>
+        <h2>Presets</h2>
+        <ul id="preset-list" class="presets" aria-busy="true"></ul>
+      </section>
+      <footer class="credits">
+        Moteur exécuté via <a href="https://pyodide.org" target="_blank" rel="noopener">Pyodide</a>.
+        <a id="repo-link" href="https://github.com/Boris-Bodin/art-generator" target="_blank" rel="noopener">Code source</a>.
+      </footer>
+    </aside>
+
+    <section class="stage">
+      <div class="viewer">
+        <img id="artwork" alt="Œuvre générée" hidden />
+        <div id="placeholder" class="placeholder">
+          <div class="spinner" aria-hidden="true"></div>
+          <p id="status">Chargement du moteur Python…</p>
+          <p class="hint">Premier chargement&nbsp;: ~20&nbsp;Mo (mis en cache ensuite).</p>
+        </div>
+      </div>
+      <div id="caption" class="caption" hidden>
+        <h3 id="caption-title"></h3>
+        <p id="caption-desc"></p>
+        <p id="caption-meta" class="meta"></p>
+      </div>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>
