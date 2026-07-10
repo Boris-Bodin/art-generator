@@ -189,7 +189,6 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
 
 - [x] **Bibliothèque de presets** (`presets/library.py`) : replace the _BUILTIN seed 
       by the reading of the *.json file
-- [x] **Web UI** : add test
 - [x] **Desktop UI** : Indique if changement has been made on the seed
 - [x] **Desktop UI** : You can select the famille d'une couche mais pas modifier les parametre
 - [x] **Desktop UI** : add throbber in place of artwork when rendering  
@@ -207,16 +206,17 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
 
 ### Phase 4 - Stabilization
 
-- [ ] Desktop UI : faire un vrai formulaire pour les paramètres d'équation (types,
+- [ ] **Desktop UI** : faire un vrai formulaire pour les paramètres d'équation (types,
   bornes, champs imbriqués) au lieu de l'éditeur JSON temporaire.
-- [ ] Some fractal without symetry are wierd 
+- [ ] Some **fractal** without symetry are wierd 
   - Nuage de point en cercle
   - Perte de densité sur 3 axes cardinal en dehors du carré concentric
-- [ ] create seed from json ?
-- [ ] The preset saved need to be put in the presets package neer the built in one, 
+- [ ] Create **seed** from json ?
+- [ ] **The preset** saved need to be put in the presets package neer the built in one, 
   to be include in the next commit to be visible on the Web UI 
-- [ ] Desktop UI select resolution/ratio, pouvoir export 
-- [ ] Web App: better mobile responsive view 
+- [ ] **Desktop UI** select resolution/ratio, pouvoir export 
+- [ ] **Web App** : better mobile responsive view
+- [ ] **Web UI** : add test onb the web app, and not on the build script 
 
 ## V2
 

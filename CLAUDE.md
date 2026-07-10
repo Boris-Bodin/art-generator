@@ -47,5 +47,5 @@ Trois invariants structurent tout le moteur — les casser est presque toujours 
 
 ## Flux de travail
 
-- **Ne pas utiliser de worktree** : éditer et commiter directement sur `master` (l'isolation en job de fond est désactivée via `.claude/settings.json`).
-- Terminer les messages de commit par `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`.
+- **Ne pas utiliser de worktree** : éditer et commiter directement sur la branche principale (l'isolation en job de fond est désactivée via `.claude/settings.json`).
+- Suivre les conventions de commit et les interdits définis dans le CLAUDE.md global (Conventional Commits, **aucune signature IA** dans les commits, PR ou merge requests).
