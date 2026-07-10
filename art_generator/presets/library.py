@@ -48,6 +48,55 @@ def _builtin_dir() -> Path:
     return Path(__file__).resolve().parent
 
 
+_FAMILY_LABELS: dict[str, str] = {
+    "attractor": "attracteur",
+    "complex": "domaine complexe",
+    "fractal": "fractale",
+    "parametric": "courbe paramétrique",
+    "particles": "particules",
+    "polar": "rosace polaire",
+    "vector_field": "champ de vecteurs",
+}
+
+_SYMMETRY_LABELS: dict[str, str] = {
+    "mirror": "miroir",
+    "radial": "symétrie radiale",
+    "kaleidoscope": "kaléidoscope",
+}
+
+_BACKGROUND_LABELS: dict[str, str] = {
+    "gradient": "fond dégradé",
+    "radial": "fond radial",
+    "white": "fond clair",
+}
+
+
+def _describe_genome(genome: ArtworkGenome) -> str:
+    """Résumé lisible d'un génome, pour un preset sans ``comment``.
+
+    Compose familles d'équations, symétrie dominante et fond en une phrase courte
+    (« Particules · kaléidoscope x6 · fond radial ») plutôt qu'un nom de fichier.
+    """
+    families = list(dict.fromkeys(
+        _FAMILY_LABELS.get(layer.equation_family, layer.equation_family)
+        for layer in genome.layers
+    ))
+    parts: list[str] = []
+    if families:
+        head = ", ".join(families)
+        parts.append(head[0].upper() + head[1:])
+    for layer in genome.layers:
+        label = _SYMMETRY_LABELS.get(layer.symmetry)
+        if label:
+            order = f" x{layer.symmetry_order}" if layer.symmetry != "mirror" else ""
+            parts.append(f"{label}{order}")
+            break
+    bg = _BACKGROUND_LABELS.get(genome.background)
+    if bg:
+        parts.append(bg)
+    return " · ".join(parts) if parts else "Génome vierge"
+
+
 def _preset_from_path(path: Path) -> Preset:
     genome = genome_io.load(path)
     title = genome.title.strip()
@@ -55,7 +104,7 @@ def _preset_from_path(path: Path) -> Preset:
         name = title
     else:
         name = path.stem.replace("_", " ").capitalize()
-    description = genome.comment.strip() if genome.comment else f"Preset JSON : {path.name}"
+    description = genome.comment.strip() if genome.comment else _describe_genome(genome)
     return Preset(name=name, path=path, description=description)
 
 
