@@ -30,15 +30,19 @@ class Fractal(Equation):
         p = self.params
         variant = p.get("variant", "mandelbrot")
         max_iter = int(p.get("max_iter", 200))
-        # Sans ces deux garde-fous, le nuage dégénère en un disque de bruit
-        # uniforme (visible surtout sans symétrie) : les orbites qui s'échappent
-        # en 1-2 pas déversent leurs positions initiales quasi-uniformes (le
+        # Le Buddhabrot brut dégénère en disque de bruit sans symétrie : les
+        # orbites rapides déversent leur position initiale quasi-uniforme (le
         # « carré ») et leur dernier point près du rayon d'échappement 2 (le
-        # « cercle »), noyant la structure nébuleuse. On ne retient donc que les
-        # orbites qui *séjournent* (``min_escape``) et on saute leurs premiers
-        # points (``min_depth``). Bornés à ``max_iter`` pour rester non vides.
-        min_escape = min(int(p.get("min_escape", 8)), max_iter)
-        min_depth = min(int(p.get("min_depth", 2)), max_iter - 1)
+        # « cercle »). On corrige ces deux artefacts *sans* décimer la densité
+        # (essentielle sous symétrie) :
+        #   - ``min_depth`` saute les tout premiers points (la couche uniforme) ;
+        #   - ``keep_radius`` écarte la coquille d'échappement (|z| proche de 2),
+        #     supprimant le bord circulaire dur tout en gardant l'intérieur.
+        # ``min_escape`` (rejet d'orbites entières) reste disponible mais neutre
+        # par défaut pour ne pas appauvrir les nuages. Bornés à ``max_iter``.
+        min_escape = min(int(p.get("min_escape", 1)), max_iter)
+        min_depth = min(int(p.get("min_depth", 1)), max_iter - 1)
+        keep_radius = float(p.get("keep_radius", 1.9))
         # Le Buddhabrot exige beaucoup de tirages candidats : seule une fraction
         # s'échappe, et chaque orbite échappée fournit plusieurs points. La borne
         # haute laisse le nuage suivre la montée en résolution (n croît avec
@@ -74,8 +78,12 @@ class Fractal(Equation):
         valid = escaped[None, :] & (depth >= min_depth) & (depth < escaped_at[None, :])
 
         orbit = history[valid]
-        points = np.column_stack((orbit.real, orbit.imag))
         values = np.clip(np.broadcast_to(depth, valid.shape)[valid] / max_iter, 0.0, 1.0)
+        if keep_radius < 2.0:  # retire la coquille d'échappement (bord circulaire)
+            inside = np.abs(orbit) <= keep_radius
+            orbit = orbit[inside]
+            values = values[inside]
+        points = np.column_stack((orbit.real, orbit.imag))
         return points, values
 
 
