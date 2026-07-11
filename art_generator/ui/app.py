@@ -207,8 +207,27 @@ class ArtGeneratorApp(tk.Tk):
         return var, combo
 
     def _build_left_panel(self) -> None:
-        panel = ttk.Frame(self, padding=8)
-        panel.grid(row=0, column=0, sticky="ns")
+        # Panneau défilant : les sections cumulées (jusqu'à Animation) dépassent la
+        # hauteur de la fenêtre ; un canevas + scrollbar évite de couper le bas.
+        outer = ttk.Frame(self)
+        outer.grid(row=0, column=0, sticky="ns")
+        outer.rowconfigure(0, weight=1)
+        left_canvas = tk.Canvas(outer, highlightthickness=0)
+        vsb = ttk.Scrollbar(outer, orient="vertical", command=left_canvas.yview)
+        left_canvas.configure(yscrollcommand=vsb.set)
+        left_canvas.grid(row=0, column=0, sticky="ns")
+        vsb.grid(row=0, column=1, sticky="ns")
+
+        panel = ttk.Frame(left_canvas, padding=8)
+        window = left_canvas.create_window((0, 0), window=panel, anchor="nw")
+
+        def _on_panel_configure(_e=None) -> None:
+            left_canvas.configure(scrollregion=left_canvas.bbox("all"),
+                                  width=panel.winfo_reqwidth())
+
+        panel.bind("<Configure>", _on_panel_configure)
+        left_canvas.bind("<Configure>", lambda e: left_canvas.itemconfigure(window, width=e.width))
+        self._left_canvas = left_canvas
 
         ttk.Label(panel, text="Œuvre", font=("", 11, "bold")).pack(anchor="w")
 
@@ -272,6 +291,24 @@ class ArtGeneratorApp(tk.Tk):
         self._vignette_var = self._labelled_scale(panel, "Vignette", 0.0, 0.6, self._on_vignette)
 
         self._build_animation_section(panel)
+        self._bind_left_wheel(panel)
+
+    def _bind_left_wheel(self, widget) -> None:
+        """Lie la molette au défilement du panneau gauche, récursivement.
+
+        Scopé à ce sous-arbre : n'interfère pas avec le zoom molette du canevas
+        central (qui a sa propre liaison).
+        """
+        def _scroll(event) -> str:
+            step = -1 if event.delta > 0 else 1
+            self._left_canvas.yview_scroll(step, "units")
+            return "break"
+
+        widget.bind("<MouseWheel>", _scroll)
+        widget.bind("<Button-4>", lambda _e: (self._left_canvas.yview_scroll(-1, "units"), "break")[1])
+        widget.bind("<Button-5>", lambda _e: (self._left_canvas.yview_scroll(1, "units"), "break")[1])
+        for child in widget.winfo_children():
+            self._bind_left_wheel(child)
 
     def _build_animation_section(self, panel) -> None:
         """Section Animation : effets cochables, aperçu animé, export vidéo."""
