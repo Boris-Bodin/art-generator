@@ -32,25 +32,6 @@ def test_preview_dimensions_preserve_ratio_and_never_upscale():
     assert preview.preview_dimensions(400, 300, max_side=560) == (400, 300)
 
 
-def test_dimensions_for_puts_resolution_on_long_side():
-    assert preview.dimensions_for(1600, "1:1") == (1600, 1600)
-    assert preview.dimensions_for(1600, "16:9") == (1600, 900)
-    assert preview.dimensions_for(1600, "9:16") == (900, 1600)
-    assert preview.dimensions_for(2400, "3:2") == (2400, 1600)
-
-
-def test_simplify_ratio_reduces_fraction():
-    assert preview.simplify_ratio(1600, 900) == "16:9"
-    assert preview.simplify_ratio(1600, 1600) == "1:1"
-    assert preview.simplify_ratio(2400, 1600) == "3:2"
-
-
-def test_dimensions_for_and_simplify_ratio_round_trip():
-    for ratio in ("1:1", "16:9", "9:16", "3:2", "4:3"):
-        w, h = preview.dimensions_for(1920, ratio)
-        assert preview.simplify_ratio(w, h) == ratio
-
-
 def test_rescale_offset_keeps_point_under_cursor():
     # L'invariant du zoom centré curseur : la coordonnée image sous le curseur
     # est inchangée avant/après le changement d'échelle.

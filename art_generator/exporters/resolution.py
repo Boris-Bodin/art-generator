@@ -14,6 +14,7 @@ prime sur celui du préréglage.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from math import gcd
 
 
 @dataclass(frozen=True)
@@ -27,6 +28,7 @@ class Preset:
 # Préréglages standards d'affichage/impression. ``ratio=None`` = résolution seule
 # (grand côté), le rapport d'aspect venant du ``--ratio`` ou du carré par défaut.
 PRESETS: dict[str, Preset] = {
+    "preview": Preset(1600),
     "hd": Preset(1280),
     "fhd": Preset(1920),
     "1080p": Preset(1920),
@@ -39,6 +41,13 @@ PRESETS: dict[str, Preset] = {
     # Poster métal Displate : format portrait recommandé 4000x5600 (ratio 1:1.4).
     "displate": Preset(5600, "1:1.4"),
 }
+
+
+def simplify_ratio(width: int, height: int) -> str:
+    """Rapport d'aspect réduit sous forme ``"a:b"`` (ex. 1600×900 → ``"16:9"``)."""
+    width, height = int(width), int(height)
+    divisor = gcd(width, height) or 1
+    return f"{width // divisor}:{height // divisor}"
 
 
 def parse_ratio(ratio: str) -> tuple[float, float]:

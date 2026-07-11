@@ -29,7 +29,7 @@ from PIL import Image, ImageTk
 
 from ..core.genome import ArtworkGenome, LayerGenome
 from ..equations import registry
-from ..exporters import genome_io, image as image_export
+from ..exporters import genome_io, image as image_export, resolution
 from ..generators import navigation
 from ..generators.genome_generator import generate
 from ..palettes import procedural
@@ -43,8 +43,25 @@ _COLOR_BY = ["velocity", "t", "radius"]
 _FRAMINGS = ["box", "density"]
 _SYMMETRIES = ["none", "mirror", "radial", "kaleidoscope"]
 _NOISE_TYPES = ["none", "perlin", "simplex", "fbm", "worley"]
-_RESOLUTIONS = ["1080", "1600", "2400", "3200", "4096"]
-_RATIOS = ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"]
+# Préréglages de sortie proposés dans l'UI : clés de exporters.resolution.PRESETS
+# (sans les alias) → libellés lisibles. Displate porte son propre ratio (1:1.4).
+_RES_KEYS = ["preview", "hd", "fhd", "2k", "4k", "8k", "16k", "displate"]
+_RES_LABELS = {
+    "preview": "Aperçu 1600",
+    "hd": "HD 720",
+    "fhd": "Full HD 1080",
+    "2k": "QHD 2K",
+    "4k": "UHD 4K",
+    "8k": "8K",
+    "16k": "16K",
+    "displate": "Displate",
+}
+# « auto » = laisser le préréglage imposer son ratio (carré si aucun).
+_RATIOS = ["auto", "1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16", "1:1.4"]
+
+_RES_LABEL_LIST = [_RES_LABELS[k] for k in _RES_KEYS]
+_RES_LABEL_TO_KEY = {_RES_LABELS[k]: k for k in _RES_KEYS}
+_RES_KEY_FOR_EDGE = {resolution.PRESETS[k].long_edge: k for k in _RES_KEYS}
 
 _DEBOUNCE_MS = 300
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -232,7 +249,7 @@ class ArtGeneratorApp(tk.Tk):
         ttk.Separator(panel).pack(fill="x", pady=6)
         ttk.Label(panel, text="Format", font=("", 10, "bold")).pack(anchor="w")
         self._resolution_var, self._resolution_combo = self._format_combo(
-            panel, "Résolution", _RESOLUTIONS
+            panel, "Résolution", _RES_LABEL_LIST
         )
         self._ratio_var, self._ratio_combo = self._format_combo(panel, "Ratio", _RATIOS)
 
@@ -343,9 +360,11 @@ class ArtGeneratorApp(tk.Tk):
         Une valeur hors de la liste standard (preset au format inhabituel) est
         ajoutée à la volée pour rester affichable et sélectionnable.
         """
-        resolution = str(max(self.genome.width, self.genome.height))
-        ratio = preview.simplify_ratio(self.genome.width, self.genome.height)
-        self._fill_combo(self._resolution_combo, self._resolution_var, resolution, _RESOLUTIONS)
+        w, h = self.genome.width, self.genome.height
+        key = _RES_KEY_FOR_EDGE.get(max(w, h))
+        label = _RES_LABELS[key] if key else str(max(w, h))
+        self._fill_combo(self._resolution_combo, self._resolution_var, label, _RES_LABEL_LIST)
+        ratio = resolution.simplify_ratio(w, h)
         self._fill_combo(self._ratio_combo, self._ratio_var, ratio, _RATIOS)
 
     @staticmethod
@@ -357,13 +376,18 @@ class ArtGeneratorApp(tk.Tk):
     def _apply_format(self) -> None:
         if self._loading:
             return
+        label = self._resolution_var.get()
+        key = _RES_LABEL_TO_KEY.get(label)
+        ratio = self._ratio_var.get()
+        ratio = None if ratio == "auto" else ratio
         try:
-            resolution = int(self._resolution_var.get())
-        except ValueError:
+            if key is not None:
+                w, h = resolution.resolve_dimensions(preset=key, ratio=ratio)
+            else:  # valeur personnalisée : grand côté numérique
+                w, h = resolution.resolve_dimensions(size=int(label), ratio=ratio)
+        except (ValueError, TypeError):
             return
-        self.genome.width, self.genome.height = preview.dimensions_for(
-            resolution, self._ratio_var.get()
-        )
+        self.genome.width, self.genome.height = w, h
         self._mark_dirty()
         self._schedule_render()
 

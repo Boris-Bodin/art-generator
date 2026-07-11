@@ -16,6 +16,7 @@ from art_generator.exporters.resolution import (
     PRESETS,
     parse_ratio,
     resolve_dimensions,
+    simplify_ratio,
 )
 
 
@@ -38,6 +39,15 @@ def test_parse_ratio_forms():
     assert parse_ratio("16:9") == (16.0, 9.0)
     assert parse_ratio("3/2") == (3.0, 2.0)
     assert parse_ratio("1.5") == (1.5, 1.0)
+
+
+def test_simplify_ratio_reduces_fraction():
+    assert simplify_ratio(1600, 900) == "16:9"
+    assert simplify_ratio(1600, 1600) == "1:1"
+    assert simplify_ratio(2400, 1600) == "3:2"
+    # cohérent avec resolve_dimensions (aller-retour sur le grand côté).
+    w, h = resolve_dimensions("4k", "16:9")
+    assert simplify_ratio(w, h) == "16:9"
 
 
 def test_unknown_preset_and_bad_ratio_raise():
