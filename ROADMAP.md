@@ -215,9 +215,17 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
       Numba ≠ NumPy) diverge totalement, et la Web tourne en Python pur (Pyodide,
       pas de Numba) → même seed ⇒ image différente desktop vs Web. Incompatible
       avec l'invariant « même rendu ».
-- [ ] **Viabilité affinée** : critère de « surface minimale » plus fin pour
-      rejeter les formes quasi 1D que le contrôle actuel laisse passer
-      (`generators/quality.py`).
+- [x] **Viabilité affinée** (`generators/quality.py`) : ajoute un critère de
+      **dimension de box-counting** (pente log-log de l'occupation à plusieurs
+      résolutions de grille, ≈ 1 pour une courbe, ≈ 2 pour un remplissage) au
+      plancher d'occupation existant. L'occupation seule laissait passer des formes
+      **quasi-1D** (courbe fine, cercle) qui remplissent beaucoup de cellules tout
+      en restant unidimensionnelles ; le plancher `D ≥ 0,8` (dans le creux empirique
+      séparant les dégénérescences, D ≲ 0,65, des courbes légitimes, D ≳ 1,0) les
+      rejette sans écarter les familles filamentaires (rosaces, courbes, champs).
+      **Note :** durcir la viabilité décale le flux RNG des re-tirages → l'art
+      dérivé d'une **seed** change (galerie incluse) ; les **presets** (génomes JSON)
+      sont intacts, et les invariants de rendu (round-trip, tuiles == simple) tiennent.
 
 ### Phase 4 - Stabilization
 
