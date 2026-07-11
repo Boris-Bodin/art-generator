@@ -197,9 +197,17 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
 
 ### Phase 3 — Performance
 
-- [ ] Optimisation : vectorisation poussée, multiprocessing
-- [ ] Accélération GPU (OpenGL/Vulkan/GLSL, Numba/CUDA) sur les points chauds
-      (itération des attracteurs, accumulation, advection de particules)
+- [x] **Vectorisation poussée** (bit-exact, pur NumPy → profite aussi au Web) :
+      accumulation par `np.bincount` au lieu de `np.ufunc.at` (parcours préservé,
+      chemin simple == rendu par tuiles au pixel près) et bruit de Perlin mémoïsé
+      par seed + indexation directe du gradient. Gains : ~−24 % particules,
+      ~−13 % attracteurs. Reste ouvert : **multiprocessing** (peu rentable sur un
+      rendu simple, indisponible en WASM → fallback séquentiel obligatoire).
+- [ ] **Accélération GPU (Numba/CUDA) — reportée (Phase 7).** La cible naturelle
+      est la boucle **chaotique** des attracteurs : un écart d'1 ULP (`sin`/`cos`
+      Numba ≠ NumPy) diverge totalement, et la Web tourne en Python pur (Pyodide,
+      pas de Numba) → même seed ⇒ image différente desktop vs Web. Incompatible
+      avec l'invariant « même rendu ». À rouvrir en Phase 7 avec la dette GPU.
 - [ ] **Viabilité affinée** : critère de « surface minimale » plus fin pour
       rejeter les formes quasi 1D que le contrôle actuel laisse passer
       (`generators/quality.py`).
