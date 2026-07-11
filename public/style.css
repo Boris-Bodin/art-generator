@@ -134,7 +134,41 @@ button:disabled { opacity: 0.5; cursor: progress; }
 
 .error { color: #ff8b8b; }
 
+/* --- Mobile / tablette étroite ------------------------------------------- */
 @media (max-width: 720px) {
+  /* La page défile naturellement plutôt que deux panneaux à défilement interne. */
+  html, body { height: auto; min-height: 100%; }
   .layout { grid-template-columns: 1fr; height: auto; }
-  .sidebar { border-right: none; border-bottom: 1px solid var(--line); }
+
+  /* L'œuvre d'abord (rendue automatiquement au chargement), les contrôles sous
+     le pli : sur mobile on veut voir l'image, pas la liste de presets. */
+  .stage { order: 1; padding: 16px; overflow: visible; }
+  .sidebar {
+    order: 2;
+    border-right: none;
+    border-top: 1px solid var(--line);
+    overflow: visible;
+  }
+
+  .topbar { padding: 14px 16px; }
+  .topbar h1 { font-size: 19px; }
+
+  .viewer, .caption { width: 100%; }
+
+  /* Cibles tactiles plus généreuses. */
+  button.primary { padding: 14px; }
+  .presets li button { padding: 12px; }
+}
+
+@media (max-width: 420px) {
+  .stage { padding: 12px; }
+  .sidebar { padding: 14px; gap: 16px; }
+  .topbar { padding: 12px 14px; }
+  .tagline { font-size: 12px; }
+}
+
+/* Respecte la préférence système de réduction des animations. */
+@media (prefers-reduced-motion: reduce) {
+  .spinner { animation: none; }
+  button.primary { transition: none; }
 }
