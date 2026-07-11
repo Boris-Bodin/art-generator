@@ -115,6 +115,14 @@ class ParticleSystem(Equation):
         life_mean = float(p.get("life", max(6.0, steps * 0.6)))
         color_by = str(p.get("color_by", "age"))
 
+        # Fenêtre temporelle (animation) : ``reveal`` in [0, 1] fait glisser une
+        # fenêtre de largeur **constante** (``trail`` fraction des pas) le long de
+        # la trajectoire. ``reveal is None`` ⇒ trajectoire complète (comportement
+        # historique, pixels identiques). La largeur constante garde un nombre de
+        # points — donc une densité et un cadrage — stables d'une frame à l'autre.
+        reveal = p.get("reveal", None)
+        trail = float(p.get("trail", 0.15))
+
         gen = np.random.default_rng(int(p["seed"]))
         pos, vel = _spawn(gen, n_particles, emitter)
         life = gen.uniform(0.5 * life_mean, 1.5 * life_mean, n_particles)
@@ -174,6 +182,13 @@ class ParticleSystem(Equation):
                 vel[dead] = nvel
                 life[dead] = gen.uniform(0.5 * life_mean, 1.5 * life_mean, k)
                 age[dead] = 0.0
+
+        if reveal is not None:
+            tail_len = max(1, min(steps, round(trail * steps)))
+            span = steps - tail_len
+            head = (tail_len - 1) + round(float(np.clip(reveal, 0.0, 1.0)) * span)
+            window = slice(head - tail_len + 1, head + 1)
+            xs, ys, cval = xs[window], ys[window], cval[window]
 
         points = np.column_stack((xs.ravel(order="F"), ys.ravel(order="F")))
         values = cval.ravel(order="F")
