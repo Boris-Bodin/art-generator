@@ -82,6 +82,28 @@ def _cmd_batch(args: argparse.Namespace) -> int:
     return 0
 
 
+def _cmd_recover_seed(args: argparse.Namespace) -> int:
+    from .generators.recover import recover_seed
+
+    genome = genome_io.load(args.genome)
+    if genome.title:
+        print(f"Titre présent : « {genome.title} » (encode souvent la seed).")
+
+    def _progress(seed: int) -> None:
+        print(f"  … seed {seed}", end="\r", file=sys.stderr, flush=True)
+
+    result = recover_seed(genome, start=args.start, stop=args.stop, on_progress=_progress)
+    print(" " * 40, end="\r", file=sys.stderr)  # efface la ligne de progression
+    if result.found:
+        print(f"Seed retrouvée : {result.seed}  ({result.tried} candidats testés)")
+        return 0
+    print(
+        f"Aucune seed dans [{args.start}, {args.stop}) ne reproduit ce génome "
+        f"({result.tried} candidats testés)."
+    )
+    return 1
+
+
 def _cmd_ui(args: argparse.Namespace) -> int:
     from .ui.app import launch  # import paresseux (Tkinter)
 
@@ -151,6 +173,17 @@ def build_parser() -> argparse.ArgumentParser:
     r.add_argument("--out", default=None)
     _add_resolution_args(r, default_size=None)
     r.set_defaults(func=_cmd_render)
+
+    rs = sub.add_parser(
+        "recover-seed",
+        help="Retrouver par force brute la seed d'un génome JSON (champ seed perdu).",
+    )
+    rs.add_argument("genome", help="Chemin du fichier .json.")
+    rs.add_argument("--start", type=int, default=0, help="Début de l'intervalle de seeds.")
+    rs.add_argument(
+        "--stop", type=int, default=100_000, help="Fin (exclue) de l'intervalle de seeds."
+    )
+    rs.set_defaults(func=_cmd_recover_seed)
 
     u = sub.add_parser("ui", help="Ouvrir l'éditeur graphique (aperçu temps réel).")
     u.add_argument("--seed", type=int, default=None, help="Seed de départ (aléatoire si omise).")
