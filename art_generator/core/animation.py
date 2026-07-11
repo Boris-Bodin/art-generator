@@ -170,8 +170,14 @@ def evaluate(genome: ArtworkGenome, t: float) -> ArtworkGenome:
 
     for track in genome.animation.tracks:
         raw = track_value(track, t)
-        current = get_path(result, track.target)
-        set_path(result, track.target, _coerce_like(current, raw))
+        try:
+            current = get_path(result, track.target)
+        except (KeyError, IndexError, AttributeError):
+            # Cible absente (ex. clé de background_params non présente pour ce
+            # fond) : on écrit la valeur brute, sans recalage de type.
+            current = None
+        value = raw if current is None else _coerce_like(current, raw)
+        set_path(result, track.target, value)
     return result
 
 

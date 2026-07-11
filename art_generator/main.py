@@ -104,6 +104,44 @@ def _cmd_recover_seed(args: argparse.Namespace) -> int:
     return 1
 
 
+def _cmd_anim(args: argparse.Namespace) -> int:
+    from .exporters import animation
+
+    # Une séquence PNG s'écrit dans un **dossier** ; GIF/MP4 dans un fichier.
+    is_sequence = args.format.lower() not in ("gif", "mp4", "webm")
+
+    if args.genome:
+        genome = genome_io.load(args.genome)
+        if args.preset is not None or args.size is not None:
+            genome.width, genome.height = _dimensions(args, default_size=genome.width)
+        stem = Path(args.genome).with_suffix("")
+        default_out = stem if is_sequence else stem.with_suffix(f".{args.format}")
+    else:
+        from .generators.genome_generator import generate
+
+        seed = args.seed if args.seed is not None else random.randint(0, 2**31 - 1)
+        width, height = _dimensions(args, default_size=1600)
+        genome = generate(seed, width=width, height=height)
+        base = Path(args.out) / f"anim_{seed}"
+        default_out = base if is_sequence else base.with_suffix(f".{args.format}")
+
+    # Réglages temporels : posés sur l'animation du génome, ou sur celle par défaut.
+    if genome.animation is None:
+        genome.animation = animation.default_spin_animation(args.frames, args.fps)
+        print("Aucune animation dans le génome : animation « spin » par défaut.")
+    else:
+        genome.animation.frames = args.frames
+        genome.animation.fps = args.fps
+
+    out = Path(args.output) if args.output else default_out
+    path = animation.save_animation(genome, out, jobs=args.jobs, dpi=args.dpi)
+    print(
+        f"Animation : {path}  ({genome.width}x{genome.height}, "
+        f"{genome.animation.frames} frames @ {genome.animation.fps} fps)"
+    )
+    return 0
+
+
 def _cmd_ui(args: argparse.Namespace) -> int:
     from .ui.app import launch  # import paresseux (Tkinter)
 
@@ -184,6 +222,22 @@ def build_parser() -> argparse.ArgumentParser:
         "--stop", type=int, default=100_000, help="Fin (exclue) de l'intervalle de seeds."
     )
     rs.set_defaults(func=_cmd_recover_seed)
+
+    a = sub.add_parser(
+        "anim", help="Rendre une animation (GIF/MP4/séquence PNG) depuis un génome ou une seed."
+    )
+    a.add_argument("genome", nargs="?", default=None, help="Chemin d'un .json (optionnel).")
+    a.add_argument("--seed", type=int, default=None, help="Seed si aucun génome fourni.")
+    a.add_argument("--frames", type=int, default=90, help="Nombre de frames.")
+    a.add_argument("--fps", type=int, default=30, help="Images par seconde.")
+    a.add_argument("--output", "-o", default=None, help="Fichier de sortie (.gif/.mp4) ou dossier PNG.")
+    a.add_argument(
+        "--jobs", type=int, default=None,
+        help="Process workers en parallèle (défaut : nombre de cœurs ; 1 = séquentiel).",
+    )
+    _add_resolution_args(a, default_size=None)
+    a.add_argument("--out", default="outputs", help="Dossier de sortie (si seed).")
+    a.set_defaults(func=_cmd_anim)
 
     u = sub.add_parser("ui", help="Ouvrir l'éditeur graphique (aperçu temps réel).")
     u.add_argument("--seed", type=int, default=None, help="Seed de départ (aléatoire si omise).")
