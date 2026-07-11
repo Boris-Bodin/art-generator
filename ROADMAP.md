@@ -230,6 +230,7 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
 - [ ] **The preset** saved need to be put in the presets package neer the built in one, 
   to be include in the next commit to be visible on the Web UI 
 - [ ] **Desktop UI** select resolution/ratio, pouvoir export 
+- [ ] **Desktop UI** big image, add pan and zoom feature
 - [ ] **Web App** : better mobile responsive view
 - [ ] **Web UI** : add test onb the web app, and not on the build script 
 
