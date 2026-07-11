@@ -78,6 +78,21 @@ def _disk_area(radius: int) -> int:
     return len(_disk_offsets(int(radius)))
 
 
+def _noise_field(
+    layer: LayerGenome, x: np.ndarray, y: np.ndarray, seed: int
+) -> np.ndarray:
+    """Échantillonne le bruit de la couche, en 2D ou en 3D selon ``noise_3d``.
+
+    ``noise_3d`` faux (défaut) ⇒ bruit 2D historique (``noise_z`` ignoré, rendu
+    inchangé au pixel près). Vrai ⇒ bruit 3D avec ``noise_z`` en 3e coordonnée
+    (axe temporel), pour un flux cohérent quand une piste anime ``noise_z``.
+    """
+    if layer.noise_3d:
+        z = np.full_like(x, layer.noise_z)
+        return noise.sample3d(layer.noise_type, x, y, z, seed)
+    return noise.sample(layer.noise_type, x, y, seed)
+
+
 def _point_modulation(
     points: np.ndarray, layer: LayerGenome, stroke_scale: float = 1.0
 ) -> tuple[np.ndarray, np.ndarray]:
@@ -112,7 +127,7 @@ def _point_modulation(
 
     fx = points[:, 0] * layer.warp_freq
     fy = points[:, 1] * layer.warp_freq
-    u = 0.5 * (noise.sample(layer.noise_type, fx + 5.3, fy + 9.1, layer.noise_seed + 555) + 1.0)
+    u = 0.5 * (_noise_field(layer, fx + 5.3, fy + 9.1, layer.noise_seed + 555) + 1.0)
 
     if layer.light_noise > 0:
         weight = area_norm * np.clip(1.0 - layer.light_noise + 2.0 * layer.light_noise * u, 0.05, 4.0)
@@ -131,17 +146,16 @@ def _apply_noise(
     ``warp_freq``) ; deux seeds décorrélées donnent des déplacements ``x``/``y``
     indépendants. Reproductible via ``layer.noise_seed``.
     """
-    kind = layer.noise_type
     fx = points[:, 0] * layer.warp_freq
     fy = points[:, 1] * layer.warp_freq
 
     if layer.warp > 0:
-        nx = noise.sample(kind, fx, fy, layer.noise_seed)
-        ny = noise.sample(kind, fx + 37.1, fy + 17.9, layer.noise_seed + 7919)
+        nx = _noise_field(layer, fx, fy, layer.noise_seed)
+        ny = _noise_field(layer, fx + 37.1, fy + 17.9, layer.noise_seed + 7919)
         points = points + layer.warp * np.column_stack((nx, ny))
 
     if layer.color_noise > 0:
-        nc = noise.sample(kind, fx * 0.5, fy * 0.5, layer.noise_seed + 104729)
+        nc = _noise_field(layer, fx * 0.5, fy * 0.5, layer.noise_seed + 104729)
         values = np.clip(values + layer.color_noise * nc, 0.0, 1.0)
 
     return points, values

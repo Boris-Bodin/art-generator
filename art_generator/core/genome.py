@@ -82,6 +82,12 @@ class LayerGenome:
     light_noise: float = 0.0  # modulation de la luminosité par point (0 = aucune)
     thickness_noise: float = 0.0  # épaisseur additionnelle max (px) pilotée par bruit
     noise_seed: int = 0
+    # --- bruit temporel (animation) ---
+    # ``noise_3d`` : évaluer le bruit en 3D, la 3e coordonnée ``noise_z`` servant
+    # d'axe temporel (une piste anime ``noise_z`` pour un flux cohérent). ``False``
+    # (défaut) ⇒ bruit 2D historique, ``noise_z`` ignoré, rendus inchangés.
+    noise_3d: bool = False
+    noise_z: float = 0.0
 
 
 @dataclass
