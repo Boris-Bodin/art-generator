@@ -253,14 +253,53 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
 
 ## V2
 
-### Phase 1 — Animation
+### Phase 1 — Animation ✅ (livré)
 
-- [ ] Animation des paramètres, couleurs, particules, équations (keyframes)
-- [ ] **Bruit 3D** (dimension temporelle) pour une animation cohérente des
-      champs de bruit (laissé ouvert en Phase 2+)
-- [ ] **Particules variables dans le temps** : taille et opacité par particule
-      évoluant au fil de la vie (laissé ouvert en Phase 3)
-- [ ] Export temporel : GIF, MP4, séquences PNG
+L'animation vit **au-dessus** du moteur, sous forme d'une fonction pure —
+`frame(t) = Engine.render(evaluate(genome, t))` — sans le modifier : tiling,
+indépendance à la résolution et déterminisme sont hérités tels quels. Invariant
+ajouté : `genome.animation is None` ⇒ `evaluate` est l'identité ⇒ rendu
+**identique au pixel près** à l'œuvre statique (aucune régression). La `seed` et
+les `equation_params['seed']` restent fixes sur toutes les frames : la structure
+ne « saute » pas, seuls les champs ciblés par une piste évoluent.
+
+- [x] **Keyframes** (`core/genome.py::Keyframe/Track/AnimationGenome`,
+      `core/animation.py`) : une `Track` fait varier **un champ du génome** adressé
+      par un **chemin pointé** (ex. `layers.0.symmetry_order`,
+      `background_params.angle`, `layers.0.palette.phase.1`) — le résolveur
+      traverse indifféremment dataclasses, dicts, listes et tuples (tuples
+      immuables reconstruits). Interpolation `step`/`linear`/`smooth`, recalage
+      sur le **type courant** du champ (`int`/`tuple` préservés). Ainsi paramètres,
+      couleurs (phase de palette), fond et **équations** (`equation_params`)
+      s'animent sans que le moteur connaisse le temps. ⚠️ Animer un paramètre de
+      *forme* d'une famille chaotique (attracteur) morphe l'image mais peut
+      scintiller (1 ULP → divergence) : préférer symétrie, palette, warp, fond,
+      opacité, `noise_z`, `reveal`.
+- [x] **Bruit 3D** (`noise/fields.py::perlin3d/simplex3d/fbm3d/worley3d`,
+      `sample3d`) : la 3e coordonnée sert d'axe temporel, pour une animation
+      **cohérente** des champs de bruit (déformation continue plutôt que
+      scintillement d'un re-seed par frame). Piloté par le drapeau
+      `LayerGenome.noise_3d` (défaut `False` ⇒ bruit 2D historique, `noise_z`
+      ignoré, rendus inchangés au pixel près) ; une piste anime `noise_z`.
+- [x] **Particules variables dans le temps** (`equations/particles.py`) :
+      paramètres `reveal` (∈[0,1]) et `trail` — une **fenêtre de largeur
+      constante** (`trail·steps`) glisse le long de la trajectoire avec `reveal`,
+      donnant des particules qui **avancent** avec une queue de comète. La
+      simulation tourne sur tous les pas (mouvement cohérent) ; largeur constante
+      ⇒ densité et cadrage stables d'une frame à l'autre. `reveal is None`
+      (défaut) ⇒ trajectoire complète, comportement historique préservé.
+- [x] **Export temporel** (`exporters/animation.py`, commande `art-generator
+      anim`) : chaque frame ne dépendant que de `(genome, t)`, le rendu est
+      *embarrassingly parallel* (`ProcessPoolExecutor`, ordre préservé, option
+      `--jobs`, fallback séquentiel), comme la planche-contact. **GIF** et
+      **séquence PNG** via Pillow (**aucune dépendance nouvelle**) ; **MP4** via
+      `imageio`/`imageio-ffmpeg` (import paresseux, dépendance **optionnelle**).
+      Une animation « spin » par défaut s'applique aux génomes sans piste.
+
+  Reste ouvert : **taille/opacité par particule au fil de la vie** (nécessiterait
+  d'étendre le contrat `sample(n)->(points, values)` par un canal de poids) ; un
+  **éditeur de timeline** dans l'UI Tkinter/Web ; l'export animé côté **Web**
+  (Pyodide : GIF lourd, MP4 indisponible en WASM).
 
 ## Dette technique connue
 

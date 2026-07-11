@@ -9,6 +9,8 @@ Exemples :
     art-generator batch -n 8 --out outputs  # plusieurs œuvres
     art-generator render outputs/genome_42.json --preset 16k    # re-rendu 16K (tuiles auto)
     art-generator render outputs/genome_42.json --out oeuvre.pdf
+    art-generator anim --seed 42 --frames 90 --format gif       # animation (spin par défaut)
+    art-generator anim genome_42.json --format mp4 --jobs 8      # vidéo parallèle
     art-generator ui --seed 42              # éditeur graphique, aperçu temps réel
 """
 
