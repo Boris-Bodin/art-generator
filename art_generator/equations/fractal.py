@@ -30,6 +30,15 @@ class Fractal(Equation):
         p = self.params
         variant = p.get("variant", "mandelbrot")
         max_iter = int(p.get("max_iter", 200))
+        # Sans ces deux garde-fous, le nuage dégénère en un disque de bruit
+        # uniforme (visible surtout sans symétrie) : les orbites qui s'échappent
+        # en 1-2 pas déversent leurs positions initiales quasi-uniformes (le
+        # « carré ») et leur dernier point près du rayon d'échappement 2 (le
+        # « cercle »), noyant la structure nébuleuse. On ne retient donc que les
+        # orbites qui *séjournent* (``min_escape``) et on saute leurs premiers
+        # points (``min_depth``). Bornés à ``max_iter`` pour rester non vides.
+        min_escape = min(int(p.get("min_escape", 8)), max_iter)
+        min_depth = min(int(p.get("min_depth", 2)), max_iter - 1)
         # Le Buddhabrot exige beaucoup de tirages candidats : seule une fraction
         # s'échappe, et chaque orbite échappée fournit plusieurs points. La borne
         # haute laisse le nuage suivre la montée en résolution (n croît avec
@@ -60,9 +69,9 @@ class Fractal(Equation):
             escaped_at[newly] = i
             alive &= ~newly
 
-        escaped = escaped_at < max_iter
+        escaped = (escaped_at < max_iter) & (escaped_at >= min_escape)
         depth = np.arange(max_iter)[:, None]
-        valid = escaped[None, :] & (depth < escaped_at[None, :])
+        valid = escaped[None, :] & (depth >= min_depth) & (depth < escaped_at[None, :])
 
         orbit = history[valid]
         points = np.column_stack((orbit.real, orbit.imag))
