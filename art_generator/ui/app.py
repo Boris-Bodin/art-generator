@@ -25,7 +25,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from PIL import ImageTk
+from PIL import Image, ImageTk
 
 from ..core.genome import ArtworkGenome, LayerGenome
 from ..equations import registry
@@ -105,6 +105,12 @@ class ArtGeneratorApp(tk.Tk):
         self._spinner_index = 0
         self._result_q: queue.Queue = queue.Queue()
         self._photo: ImageTk.PhotoImage | None = None
+
+        # -- état pan & zoom de l'aperçu --
+        self._preview_image = None          # dernière image d'aperçu (PIL)
+        self._view_zoom = 1.0               # 1.0 = ajusté au canevas
+        self._view_offset: tuple[float, float] | None = None  # coin haut-gauche (px canevas)
+        self._pan_anchor: tuple[float, float, float, float] | None = None
 
         self._build_ui()
         self._update_title()
@@ -241,9 +247,16 @@ class ArtGeneratorApp(tk.Tk):
         panel.rowconfigure(0, weight=1)
         panel.columnconfigure(0, weight=1)
 
-        self._canvas = tk.Label(panel, background="#111111")
+        self._canvas = tk.Canvas(panel, background="#111111", highlightthickness=0)
         self._canvas.grid(row=0, column=0, sticky="nsew")
-        self._status = ttk.Label(panel, text="")
+        self._canvas.bind("<Configure>", lambda _e: self._draw_preview())
+        self._canvas.bind("<MouseWheel>", self._on_wheel)          # Windows / macOS
+        self._canvas.bind("<Button-4>", lambda e: self._on_wheel(e, 120))   # Linux molette +
+        self._canvas.bind("<Button-5>", lambda e: self._on_wheel(e, -120))  # Linux molette -
+        self._canvas.bind("<Button-1>", self._on_pan_start)
+        self._canvas.bind("<B1-Motion>", self._on_pan_move)
+        self._canvas.bind("<Double-Button-1>", lambda _e: self._reset_view())
+        self._status = ttk.Label(panel, text="Molette : zoom · glisser : déplacer · double-clic : ajuster")
         self._status.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
     def _build_right_panel(self) -> None:
@@ -743,13 +756,11 @@ class ArtGeneratorApp(tk.Tk):
             return
         frame = _SPINNER_FRAMES[self._spinner_index % len(_SPINNER_FRAMES)]
         self._spinner_index += 1
-        self._canvas.configure(
-            image="",
-            text=f"{frame} Rendu…",
-            foreground="#f8fafc",
-            background="#111111",
-            font=("", 16, "bold"),
-            compound="center",
+        self._canvas.delete("all")
+        cw = max(1, self._canvas.winfo_width())
+        ch = max(1, self._canvas.winfo_height())
+        self._canvas.create_text(
+            cw / 2, ch / 2, text=f"{frame} Rendu…", fill="#f8fafc", font=("", 16, "bold")
         )
         self._spinner_job = self.after(90, lambda: self._animate_spinner(request_id))
 
@@ -768,15 +779,95 @@ class ArtGeneratorApp(tk.Tk):
                 if exc is not None:
                     self._status.configure(text=f"Erreur : {exc}")
                     continue
-                self._photo = ImageTk.PhotoImage(img)
-                self._canvas.configure(image=self._photo, text="")
+                self._preview_image = img
+                self._draw_preview()
+                zoom = f" · zoom {self._view_zoom:.1f}x" if self._view_zoom > 1.0 else ""
                 self._status.configure(
                     text=f"{self.genome.width}×{self.genome.height} · aperçu "
-                    f"{img.width}×{img.height} · {elapsed:.2f}s"
+                    f"{img.width}×{img.height} · {elapsed:.2f}s{zoom}"
                 )
         except queue.Empty:
             pass
         self.after(50, self._poll_results)
+
+    # -- pan & zoom de l'aperçu ----------------------------------------------
+
+    def _fit_scale(self) -> float:
+        """Échelle qui ajuste l'image au canevas (ratio préservé)."""
+        img = self._preview_image
+        cw = max(1, self._canvas.winfo_width())
+        ch = max(1, self._canvas.winfo_height())
+        return min(cw / img.width, ch / img.height)
+
+    def _current_offset(self) -> tuple[float, float]:
+        """Coin haut-gauche courant de l'image (centré si aucun décalage explicite)."""
+        if self._view_offset is not None:
+            return self._view_offset
+        scale = self._fit_scale() * self._view_zoom
+        cw = max(1, self._canvas.winfo_width())
+        ch = max(1, self._canvas.winfo_height())
+        return ((cw - self._preview_image.width * scale) / 2,
+                (ch - self._preview_image.height * scale) / 2)
+
+    def _draw_preview(self) -> None:
+        """Dessine l'aperçu au zoom/décalage courants (portion visible seulement)."""
+        img = self._preview_image
+        if img is None:
+            return
+        cw = self._canvas.winfo_width()
+        ch = self._canvas.winfo_height()
+        if cw <= 1 or ch <= 1:
+            return
+        scale = self._fit_scale() * self._view_zoom
+        ox, oy = self._current_offset()
+        x0, y0, x1, y1 = preview.visible_source_box(img.width, img.height, cw, ch, scale, (ox, oy))
+        self._canvas.delete("all")
+        if x1 <= x0 or y1 <= y0:  # image hors champ (pan extrême)
+            return
+        crop = img.crop((x0, y0, x1, y1))
+        dw = max(1, round((x1 - x0) * scale))
+        dh = max(1, round((y1 - y0) * scale))
+        self._photo = ImageTk.PhotoImage(crop.resize((dw, dh), Image.BILINEAR))
+        self._canvas.create_image(ox + x0 * scale, oy + y0 * scale, anchor="nw", image=self._photo)
+
+    def _on_wheel(self, event, delta: int | None = None) -> None:
+        if self._preview_image is None:
+            return
+        step = event.delta if delta is None else delta
+        self._apply_zoom(1.25 if step > 0 else 1 / 1.25, event.x, event.y)
+
+    def _apply_zoom(self, factor: float, cx: float, cy: float) -> None:
+        old = self._view_zoom
+        new = min(8.0, max(1.0, old * factor))
+        if new == old:
+            return
+        fit = self._fit_scale()
+        ox, oy = self._current_offset()
+        nox = preview.rescale_offset(ox, cx, fit * old, fit * new)
+        noy = preview.rescale_offset(oy, cy, fit * old, fit * new)
+        self._view_zoom = new
+        self._view_offset = None if new <= 1.0001 else (nox, noy)
+        self._draw_preview()
+
+    def _on_pan_start(self, event) -> None:
+        if self._preview_image is None or self._view_zoom <= 1.0:
+            return
+        ox, oy = self._current_offset()
+        self._pan_anchor = (event.x, event.y, ox, oy)
+
+    def _on_pan_move(self, event) -> None:
+        if self._pan_anchor is None:
+            return
+        ax, ay, ox, oy = self._pan_anchor
+        self._view_offset = (ox + (event.x - ax), oy + (event.y - ay))
+        self._draw_preview()
+
+    def _reset_view(self) -> None:
+        """Réajuste l'aperçu au canevas (zoom 1, recentré)."""
+        self._view_zoom = 1.0
+        self._view_offset = None
+        self._pan_anchor = None
+        self._draw_preview()
 
 
 def launch(seed: int | None = None) -> int:

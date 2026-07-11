@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
-from math import gcd
+from math import ceil, gcd
 
 from PIL import Image
 
@@ -62,6 +62,36 @@ def simplify_ratio(width: int, height: int) -> str:
     width, height = int(width), int(height)
     divisor = gcd(width, height) or 1
     return f"{width // divisor}:{height // divisor}"
+
+
+def rescale_offset(offset: float, cursor: float, old_scale: float, new_scale: float) -> float:
+    """Nouveau décalage d'affichage d'un axe pour un zoom **centré sur le curseur**.
+
+    Le point de l'image sous ``cursor`` (en pixels canevas) doit y rester après le
+    passage de l'échelle ``old_scale`` à ``new_scale``. L'image est dessinée à
+    partir de ``offset`` : le point image sous le curseur vaut ``(cursor-offset)/
+    old_scale`` ; on résout le nouvel ``offset`` qui le laisse fixe.
+    """
+    return cursor - (cursor - offset) * new_scale / old_scale
+
+
+def visible_source_box(
+    img_w: int, img_h: int, canvas_w: int, canvas_h: int, scale: float,
+    offset: tuple[float, float],
+) -> tuple[int, int, int, int]:
+    """Boîte source (px image) réellement visible dans le canevas au zoom courant.
+
+    Permet de ne redimensionner que la portion affichée : borne la taille de
+    l'image intermédiaire à ~celle du canevas, quel que soit le facteur de zoom.
+    Renvoie ``(x0, y0, x1, y1)`` avec ``x0<x1`` et ``y0<y1`` tant qu'une partie de
+    l'image est visible.
+    """
+    ox, oy = offset
+    x0 = max(0, int((0 - ox) / scale))
+    y0 = max(0, int((0 - oy) / scale))
+    x1 = min(img_w, int(ceil((canvas_w - ox) / scale)))
+    y1 = min(img_h, int(ceil((canvas_h - oy) / scale)))
+    return x0, y0, x1, y1
 
 
 def render_preview(

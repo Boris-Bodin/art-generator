@@ -51,6 +51,21 @@ def test_dimensions_for_and_simplify_ratio_round_trip():
         assert preview.simplify_ratio(w, h) == ratio
 
 
+def test_rescale_offset_keeps_point_under_cursor():
+    # L'invariant du zoom centré curseur : la coordonnée image sous le curseur
+    # est inchangée avant/après le changement d'échelle.
+    offset, cursor, old, new = 30.0, 120.0, 2.0, 5.0
+    new_offset = preview.rescale_offset(offset, cursor, old, new)
+    assert (cursor - offset) / old == pytest.approx((cursor - new_offset) / new)
+
+
+def test_visible_source_box_clips_to_image_and_canvas():
+    # Image plus grande que le canevas, alignée : la fenêtre visible = le canevas.
+    assert preview.visible_source_box(200, 200, 100, 100, 1.0, (0.0, 0.0)) == (0, 0, 100, 100)
+    # Décalée vers le haut-gauche : la fenêtre visible glisse dans l'image.
+    assert preview.visible_source_box(200, 200, 100, 100, 1.0, (-50.0, -50.0)) == (50, 50, 150, 150)
+
+
 def test_render_preview_size_and_non_degenerate():
     genome = ag.generate(42, 1600, 1200)
     img = preview.render_preview(genome, max_side=280)
