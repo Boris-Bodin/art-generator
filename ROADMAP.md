@@ -227,20 +227,29 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
       dérivé d'une **seed** change (galerie incluse) ; les **presets** (génomes JSON)
       sont intacts, et les invariants de rendu (round-trip, tuiles == simple) tiennent.
 
-### Phase 4 - Stabilization
+### Phase 4 - Stabilization ✅ (livré)
 
-- [ ] **Desktop UI** : faire un vrai formulaire pour les paramètres d'équation (types,
-  bornes, champs imbriqués) au lieu de l'éditeur JSON temporaire.
-- [ ] Some **fractal** without symetry are wierd 
-  - Nuage de point en cercle
-  - Perte de densité sur 3 axes cardinal en dehors du carré concentric
-- [ ] Create **seed** from json ?
-- [ ] **The preset** saved need to be put in the presets package neer the built in one, 
-  to be include in the next commit to be visible on the Web UI 
-- [ ] **Desktop UI** select resolution/ratio, pouvoir export 
-- [ ] **Desktop UI** big image, add pan and zoom feature
-- [ ] **Web App** : better mobile responsive view
-- [ ] **Web UI** : add test onb the web app, and not on the build script 
+- [x] **Desktop UI** : formulaire typé pour les paramètres d'équation (case à
+  cocher, listes de choix par famille, saisies validées, dicts imbriqués aplatis
+  en chemins pointés) au lieu de l'éditeur JSON. Logique pure dans
+  `ui/param_form.py`, testée hors toolkit.
+- [x] **Fractales sans symétrie** : le Buddhabrot dégénérait en disque de bruit
+  (carré des positions initiales + cercle du rayon d'échappement). Corrigé en ne
+  retenant que les orbites qui séjournent (`min_escape`) et en sautant leurs
+  premiers points (`min_depth`).
+- [x] **Seed depuis un JSON** : au chargement d'un JSON ou d'un preset, la seed de
+  navigation (`_nav_seed`) repart de `genome.seed` (mutation/pas-à-pas cohérents).
+- [x] **Preset dans le package** : `library.builtin_dir()` + `save_builtin_preset()`
+  écrivent dans `art_generator/presets/` (versionné, exposé sur la Web UI) ;
+  l'UI propose la destination (package vs perso).
+- [x] **Desktop UI** : section Format — choix résolution (grand côté) et ratio
+  d'aspect, appliqués au génome donc à l'export.
+- [x] **Desktop UI** : pan & zoom sur l'aperçu (molette centrée curseur, glisser,
+  double-clic pour réajuster ; seule la portion visible est redimensionnée).
+- [x] **Web App** : vue mobile améliorée (< 720 px : page défilante, œuvre avant
+  les contrôles, cibles tactiles, `prefers-reduced-motion`).
+- [x] **Web UI** : tests pytest (`tests/test_web.py`) validant `public/engine.py`
+  et la cohérence presets/version, en amont du build.
 
 ## V2
 
