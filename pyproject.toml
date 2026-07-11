@@ -11,6 +11,9 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=8.0"]
+# Export vidéo MP4 (art-generator anim --format mp4). Optionnel : GIF et séquence
+# PNG fonctionnent sans, via Pillow. Import paresseux (exporters/animation.py).
+video = ["imageio>=2.30", "imageio-ffmpeg>=0.5"]
 
 [project.scripts]
 art-generator = "art_generator.main:main"
