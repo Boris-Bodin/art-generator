@@ -423,7 +423,14 @@ class ArtGeneratorApp(tk.Tk):
         name = simpledialog.askstring("Preset", "Nom du preset :", parent=self)
         if not name:
             return
-        path = library.save_user_preset(self.genome, name)
+        in_package = messagebox.askyesno(
+            "Preset",
+            "Enregistrer dans le package (versionné, livré au prochain commit et "
+            "visible sur la Web UI) ?\n\nNon = preset personnel local.",
+            parent=self,
+        )
+        save = library.save_builtin_preset if in_package else library.save_user_preset
+        path = save(self.genome, name)
         self._dirty = False
         self._update_title()
         self._refresh_presets(select=name)

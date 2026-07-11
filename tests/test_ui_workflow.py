@@ -174,6 +174,26 @@ def test_saved_user_preset_is_discovered_by_catalog(tmp_path, monkeypatch):
     assert genome.height == 80
 
 
+def test_builtin_dir_points_to_presets_package():
+    # Le dossier ciblé pour livrer un preset est bien le package versionné,
+    # celui d'où proviennent les presets intégrés.
+    directory = library.builtin_dir()
+    assert directory.name == "presets"
+    assert (directory / "library.py").exists()
+    for preset in library.builtin_presets():
+        assert preset.path.parent == directory
+
+
+def test_save_builtin_preset_writes_into_package(tmp_path, monkeypatch):
+    # save_builtin_preset délègue à builtin_dir() : on l'y détourne pour ne pas
+    # polluer le package, et on vérifie que le preset y est écrit puis découvert
+    # par le catalogue intégré.
+    monkeypatch.setattr(library, "builtin_dir", lambda: tmp_path)
+    path = library.save_builtin_preset(ag.generate(9), "Preset livré")
+    assert path.parent == tmp_path
+    assert "Preset livré" in [p.name for p in library.builtin_presets()]
+
+
 def test_user_preset_slugifies_name(tmp_path):
     path = library.save_user_preset(ag.generate(1), "Été : Vague / 2", directory=tmp_path)
     assert path.suffix == ".json"

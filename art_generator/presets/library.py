@@ -43,8 +43,13 @@ class Preset:
         return genome
 
 
-def _builtin_dir() -> Path:
-    """Dossier contenant les presets JSON embarqués dans le package."""
+def builtin_dir() -> Path:
+    """Dossier contenant les presets JSON embarqués dans le package.
+
+    C'est ce dossier — versionné avec le code — qu'il faut viser pour qu'un
+    preset soit livré au prochain commit et apparaisse sur la Web UI (le build
+    web recopie ces JSON dans ``presets.json``).
+    """
     return Path(__file__).resolve().parent
 
 
@@ -117,7 +122,7 @@ def _load_presets_from(directory: Path) -> tuple[Preset, ...]:
 
 def builtin_presets() -> tuple[Preset, ...]:
     """Catalogue des presets embarqués dans le package."""
-    return _load_presets_from(_builtin_dir())
+    return _load_presets_from(builtin_dir())
 
 
 def user_presets(directory: str | Path | None = None) -> tuple[Preset, ...]:
@@ -175,6 +180,16 @@ def save_user_preset(
     saved.title = name
     genome_io.save(saved, path)
     return path
+
+
+def save_builtin_preset(genome: ArtworkGenome, name: str) -> Path:
+    """Enregistre un génome comme preset **intégré** (dans le package).
+
+    Identique à :func:`save_user_preset` mais écrit dans :func:`builtin_dir`, de
+    sorte que le JSON soit versionné, inclus au prochain commit et exposé sur la
+    Web UI. À réserver aux presets que l'on veut réellement livrer.
+    """
+    return save_user_preset(genome, name, directory=builtin_dir())
 
 
 def list_user_presets(directory: str | Path | None = None) -> list[Path]:
