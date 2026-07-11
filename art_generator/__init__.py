@@ -15,7 +15,14 @@ de commande.
 from __future__ import annotations
 
 from .core.engine import Engine
-from .core.genome import ArtworkGenome, LayerGenome, PaletteGenome
+from .core.genome import (
+    AnimationGenome,
+    ArtworkGenome,
+    Keyframe,
+    LayerGenome,
+    PaletteGenome,
+    Track,
+)
 from .generators.genome_generator import generate
 
 __all__ = [
@@ -23,6 +30,9 @@ __all__ = [
     "ArtworkGenome",
     "LayerGenome",
     "PaletteGenome",
+    "AnimationGenome",
+    "Track",
+    "Keyframe",
     "generate",
     "render_seed",
 ]

@@ -85,6 +85,51 @@ class LayerGenome:
 
 
 @dataclass
+class Keyframe:
+    """Une image-clé : une ``value`` (scalaire ou liste) à l'instant ``t``.
+
+    ``t`` est normalisé dans ``[0, 1]`` (0 = début de l'animation, 1 = fin).
+    ``value`` peut être un scalaire ou une liste, interpolée élément par élément
+    (ex. un vecteur ``phase`` de palette).
+    """
+
+    t: float
+    value: Any
+
+
+@dataclass
+class Track:
+    """Piste d'animation : fait varier **un champ du génome** au fil du temps.
+
+    ``target`` est un chemin pointé vers un champ du génome (ex.
+    ``"layers.0.symmetry_order"``, ``"background_params.angle"``,
+    ``"layers.0.palette.phase.1"``), résolu par
+    :mod:`art_generator.core.animation`. Les ``keyframes`` définissent la valeur
+    à interpoler ; ``interp`` fixe le mode entre deux images-clés.
+    """
+
+    target: str
+    keyframes: list[Keyframe] = field(default_factory=list)
+    interp: str = "linear"  # step | linear | smooth
+
+
+@dataclass
+class AnimationGenome:
+    """Dimension temporelle d'une œuvre : un ensemble de pistes de keyframes.
+
+    Une œuvre animée reste **une seed → un génome** : à l'instant ``t`` on dérive
+    un génome statique interpolé (``animation.evaluate``) que le moteur rend sans
+    modification. ``animation is None`` ⇒ rendu identique au pixel près à l'œuvre
+    statique.
+    """
+
+    fps: int = 30
+    frames: int = 90
+    loop: bool = True  # boucle sans couture (t balaye [0, 1))
+    tracks: list[Track] = field(default_factory=list)
+
+
+@dataclass
 class ArtworkGenome:
     """Génome complet d'une œuvre.
 
@@ -100,6 +145,9 @@ class ArtworkGenome:
     background_params: dict[str, Any] = field(default_factory=dict)
 
     layers: list[LayerGenome] = field(default_factory=lambda: [LayerGenome()])
+
+    # Dimension temporelle optionnelle. ``None`` ⇒ œuvre statique (défaut).
+    animation: AnimationGenome | None = None
 
     title: str = ""
     comment: str = ""
