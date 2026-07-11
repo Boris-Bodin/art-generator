@@ -201,13 +201,20 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
       accumulation par `np.bincount` au lieu de `np.ufunc.at` (parcours préservé,
       chemin simple == rendu par tuiles au pixel près) et bruit de Perlin mémoïsé
       par seed + indexation directe du gradient. Gains : ~−24 % particules,
-      ~−13 % attracteurs. Reste ouvert : **multiprocessing** (peu rentable sur un
-      rendu simple, indisponible en WASM → fallback séquentiel obligatoire).
-- [ ] **Accélération GPU (Numba/CUDA) — reportée (Phase 7).** La cible naturelle
+      ~−13 % attracteurs.
+- [x] **Multiprocessing de la planche-contact** (`examples/generate_gallery.py`) :
+      chaque tuile ne dépend que de sa seed → rendu *embarrassingly parallel* sur
+      un `ProcessPoolExecutor` (ordre préservé, option `--jobs`), avec fallback
+      séquentiel (une seule tuile ou `--jobs 1`). Résultat identique au pixel près
+      quel que soit le nombre de workers (testé). Gain mesuré : **×3,3** sur
+      12 cœurs (bridé par le straggler « particules » et le démarrage des workers).
+      Reste ouvert : le multiprocessing d'un **rendu simple** (peu rentable, et
+      indisponible en WASM → la Web garde le chemin séquentiel).
+- [ ] **Accélération GPU (Numba/CUDA) — reportée.** La cible naturelle
       est la boucle **chaotique** des attracteurs : un écart d'1 ULP (`sin`/`cos`
       Numba ≠ NumPy) diverge totalement, et la Web tourne en Python pur (Pyodide,
       pas de Numba) → même seed ⇒ image différente desktop vs Web. Incompatible
-      avec l'invariant « même rendu ». À rouvrir en Phase 7 avec la dette GPU.
+      avec l'invariant « même rendu ».
 - [ ] **Viabilité affinée** : critère de « surface minimale » plus fin pour
       rejeter les formes quasi 1D que le contrôle actuel laisse passer
       (`generators/quality.py`).
@@ -243,7 +250,6 @@ Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
   particles.py`) sont des boucles Python sur les pas (correctes mais limitées à
   quelques centaines de milliers de points par couche) — candidates n°1 au GPU.
   L'interface `Equation.sample` est conçue pour ne pas changer lors de ce portage.
-  À traiter en Phase 7.
 - [ ] Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
   de « surface minimale » plus fin est envisageable. À traiter en Phase 7
   (viabilité affinée).
