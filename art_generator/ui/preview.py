@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import copy
 from dataclasses import replace
+from math import gcd
 
 from PIL import Image
 
@@ -38,6 +39,29 @@ def preview_dimensions(width: int, height: int, max_side: int = DEFAULT_MAX_SIDE
         return int(width), int(height)
     scale = max_side / long_edge
     return max(1, round(width * scale)), max(1, round(height * scale))
+
+
+def dimensions_for(resolution: int, ratio: str) -> tuple[int, int]:
+    """Dimensions (largeur, hauteur) pour un ``resolution`` (grand côté) et un ratio.
+
+    ``ratio`` est un rapport d'aspect ``"largeur:hauteur"`` (ex. ``"16:9"``,
+    ``"1:1"``). Le **grand côté** vaut toujours ``resolution`` ; l'autre en
+    découle, arrêté à au moins 1 px.
+    """
+    rw, rh = (float(x) for x in ratio.split(":"))
+    if rw <= 0 or rh <= 0:
+        raise ValueError(f"Ratio invalide : {ratio!r}")
+    resolution = int(resolution)
+    if rw >= rh:
+        return resolution, max(1, round(resolution * rh / rw))
+    return max(1, round(resolution * rw / rh)), resolution
+
+
+def simplify_ratio(width: int, height: int) -> str:
+    """Rapport d'aspect réduit sous forme ``"a:b"`` (ex. 1600×900 → ``"16:9"``)."""
+    width, height = int(width), int(height)
+    divisor = gcd(width, height) or 1
+    return f"{width // divisor}:{height // divisor}"
 
 
 def render_preview(

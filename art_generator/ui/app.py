@@ -43,6 +43,8 @@ _COLOR_BY = ["velocity", "t", "radius"]
 _FRAMINGS = ["box", "density"]
 _SYMMETRIES = ["none", "mirror", "radial", "kaleidoscope"]
 _NOISE_TYPES = ["none", "perlin", "simplex", "fbm", "worley"]
+_RESOLUTIONS = ["1080", "1600", "2400", "3200", "4096"]
+_RATIOS = ["1:1", "3:2", "2:3", "4:3", "3:4", "16:9", "9:16"]
 
 _DEBOUNCE_MS = 300
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
@@ -154,6 +156,22 @@ class ArtGeneratorApp(tk.Tk):
             self._editor_widgets.append(combo)
         return var
 
+    def _format_combo(self, parent, label, values):
+        """Ligne étiquette + combobox de format ; applique la taille à la sélection.
+
+        Renvoie ``(StringVar, Combobox)`` : la combobox est conservée pour lui
+        ajouter, au besoin, la valeur courante du génome quand elle sort de la
+        liste standard.
+        """
+        row = ttk.Frame(parent)
+        row.pack(fill="x", pady=2)
+        ttk.Label(row, text=label, width=12).pack(side="left")
+        var = tk.StringVar()
+        combo = ttk.Combobox(row, textvariable=var, values=values, state="readonly")
+        combo.pack(side="left", fill="x", expand=True)
+        combo.bind("<<ComboboxSelected>>", lambda _e: self._apply_format())
+        return var, combo
+
     def _build_left_panel(self) -> None:
         panel = ttk.Frame(self, padding=8)
         panel.grid(row=0, column=0, sticky="ns")
@@ -204,6 +222,13 @@ class ArtGeneratorApp(tk.Tk):
         ttk.Button(panel, text="Ouvrir JSON…", command=self._open_json).pack(fill="x", pady=2)
         ttk.Button(panel, text="Enregistrer JSON…", command=self._save_json).pack(fill="x", pady=2)
         ttk.Button(panel, text="Exporter l'image…", command=self._export_image).pack(fill="x", pady=2)
+
+        ttk.Separator(panel).pack(fill="x", pady=6)
+        ttk.Label(panel, text="Format", font=("", 10, "bold")).pack(anchor="w")
+        self._resolution_var, self._resolution_combo = self._format_combo(
+            panel, "Résolution", _RESOLUTIONS
+        )
+        self._ratio_var, self._ratio_combo = self._format_combo(panel, "Ratio", _RATIOS)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
         ttk.Label(panel, text="Fond", font=("", 10, "bold")).pack(anchor="w")
@@ -278,6 +303,7 @@ class ArtGeneratorApp(tk.Tk):
         self._loading = True
         try:
             self._seed_var.set(str(self.genome.seed))
+            self._sync_format()
             self._bg_var.set(self.genome.background)
             self._vignette_var.set(float(self.genome.background_params.get("vignette", 0.0)))
             n = len(self.genome.layers)
@@ -297,6 +323,36 @@ class ArtGeneratorApp(tk.Tk):
             self._refresh_layer()
         finally:
             self._loading = False
+
+    def _sync_format(self) -> None:
+        """Reflète les dimensions du génome dans les combos résolution/ratio.
+
+        Une valeur hors de la liste standard (preset au format inhabituel) est
+        ajoutée à la volée pour rester affichable et sélectionnable.
+        """
+        resolution = str(max(self.genome.width, self.genome.height))
+        ratio = preview.simplify_ratio(self.genome.width, self.genome.height)
+        self._fill_combo(self._resolution_combo, self._resolution_var, resolution, _RESOLUTIONS)
+        self._fill_combo(self._ratio_combo, self._ratio_var, ratio, _RATIOS)
+
+    @staticmethod
+    def _fill_combo(combo, var, value: str, base: list[str]) -> None:
+        values = base if value in base else [*base, value]
+        combo["values"] = values
+        var.set(value)
+
+    def _apply_format(self) -> None:
+        if self._loading:
+            return
+        try:
+            resolution = int(self._resolution_var.get())
+        except ValueError:
+            return
+        self.genome.width, self.genome.height = preview.dimensions_for(
+            resolution, self._ratio_var.get()
+        )
+        self._mark_dirty()
+        self._schedule_render()
 
     def _set_editor_enabled(self, enabled: bool) -> None:
         """Active ou désactive les widgets d'édition de couche."""
@@ -417,7 +473,9 @@ class ArtGeneratorApp(tk.Tk):
 
     def _load_preset(self) -> None:
         if self._preset_var.get():
-            self._set_genome(library.load(self._preset_var.get()))
+            genome = library.load(self._preset_var.get())
+            self._nav_seed = genome.seed  # la navigation repart de la seed du preset
+            self._set_genome(genome)
 
     def _save_user_preset(self) -> None:
         name = simpledialog.askstring("Preset", "Nom du preset :", parent=self)
@@ -441,9 +499,12 @@ class ArtGeneratorApp(tk.Tk):
         if not path:
             return
         try:
-            self._set_genome(genome_io.load(path))
+            genome = genome_io.load(path)
         except Exception as exc:  # pragma: no cover - dépend du fichier choisi
             messagebox.showerror("Ouverture", str(exc))
+            return
+        self._nav_seed = genome.seed  # la navigation repart de la seed du fichier
+        self._set_genome(genome)
 
     def _save_json(self) -> None:
         path = filedialog.asksaveasfilename(defaultextension=".json",
