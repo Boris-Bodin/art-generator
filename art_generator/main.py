@@ -129,7 +129,7 @@ def _cmd_anim(args: argparse.Namespace) -> int:
 
     # Réglages temporels : posés sur l'animation du génome, ou sur celle par défaut.
     if genome.animation is None:
-        genome.animation = animation.default_spin_animation(args.frames, args.fps)
+        genome.animation = animation.default_spin_animation(genome, args.frames, args.fps)
         print("Aucune animation dans le génome : animation « spin » par défaut.")
     else:
         genome.animation.frames = args.frames

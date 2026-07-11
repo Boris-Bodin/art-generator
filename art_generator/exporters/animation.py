@@ -29,31 +29,40 @@ from ..core.engine import Engine
 from ..core.genome import AnimationGenome, ArtworkGenome, Keyframe, Track
 
 
-def default_spin_animation(frames: int = 90, fps: int = 30) -> AnimationGenome:
+def default_spin_animation(
+    genome: ArtworkGenome, frames: int = 90, fps: int = 30
+) -> AnimationGenome:
     """Animation « de démonstration » quand le génome n'en porte aucune.
 
-    Fait tourner l'orientation du fond et la phase de teinte de la première
-    couche sur un cycle complet — visible sur (presque) toute œuvre, en boucle.
+    Fait tourner l'orientation du fond **et cycle la couleur de chaque couche**
+    sur un tour complet (boucle sans couture). Le cyclage s'adapte au mode de
+    palette : la **teinte** (``hue``) pour hsv/hsl, la **phase** du gradient
+    cosinus sinon — de sorte que le *sujet* s'anime visiblement quelle que soit
+    l'œuvre (et pas seulement le fond).
     """
     tau = 6.283185307179586
-    return AnimationGenome(
-        fps=fps,
-        frames=frames,
-        loop=True,
-        tracks=[
-            Track("background_params.angle", [Keyframe(0.0, 0.0), Keyframe(1.0, tau)]),
-            Track(
-                "layers.0.palette.phase",
-                [Keyframe(0.0, [0.0, 0.33, 0.67]), Keyframe(1.0, [1.0, 1.33, 1.67])],
-            ),
-        ],
-    )
+    tracks = [Track("background_params.angle", [Keyframe(0.0, 0.0), Keyframe(1.0, tau)])]
+    for i, layer in enumerate(genome.layers):
+        if layer.palette.mode in ("hsv", "hsl"):
+            h0 = float(layer.palette.hue[0])
+            tracks.append(
+                Track(f"layers.{i}.palette.hue.0", [Keyframe(0.0, h0), Keyframe(1.0, h0 + 1.0)])
+            )
+        else:  # cosine (ou gradient : phase ignorée, sans effet mais inoffensif)
+            phase = list(layer.palette.phase)
+            tracks.append(
+                Track(
+                    f"layers.{i}.palette.phase",
+                    [Keyframe(0.0, phase), Keyframe(1.0, [p + 1.0 for p in phase])],
+                )
+            )
+    return AnimationGenome(fps=fps, frames=frames, loop=True, tracks=tracks)
 
 
 def _ensure_animation(genome: ArtworkGenome) -> AnimationGenome:
     if genome.animation is not None:
         return genome.animation
-    return default_spin_animation()
+    return default_spin_animation(genome)
 
 
 # Fonction de niveau module (picklable) exécutée dans les process workers.

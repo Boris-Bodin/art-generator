@@ -66,20 +66,32 @@ def test_save_animation_dispatch_png_sequence(tmp_path):
 def test_default_spin_animation_used_when_none():
     genome = ag.generate(7, 96, 96)
     assert genome.animation is None
-    # À défaut d'animation, une « spin » par défaut est fabriquée (structure).
+    # À défaut d'animation, une « spin » par défaut est fabriquée (structure) :
+    # rotation du fond + un cyclage couleur par couche.
     used = anim_export._ensure_animation(genome)
     assert used.frames == 90 and used.loop is True
-    assert {t.target for t in used.tracks} == {
-        "background_params.angle",
-        "layers.0.palette.phase",
-    }
+    assert "background_params.angle" in {t.target for t in used.tracks}
+    assert len(used.tracks) == 1 + len(genome.layers)
+
+
+def test_default_spin_cycles_color_per_palette_mode():
+    genome = ag.generate(7, 64, 64)
+    genome.layers[0].palette.mode = "hsl"
+    anim = anim_export.default_spin_animation(genome)
+    targets = {t.target for t in anim.tracks}
+    assert "layers.0.palette.hue.0" in targets  # hsl -> teinte
+
+    genome.layers[0].palette.mode = "cosine"
+    anim = anim_export.default_spin_animation(genome)
+    targets = {t.target for t in anim.tracks}
+    assert "layers.0.palette.phase" in targets  # cosinus -> phase
 
 
 def test_default_spin_renders_on_arbitrary_genome():
     # Le spin par défaut cible background_params.angle même si la clé est absente :
     # evaluate doit rester robuste (pas de KeyError).
     genome = ag.generate(7, 64, 64)
-    genome.animation = anim_export.default_spin_animation(frames=2)
+    genome.animation = anim_export.default_spin_animation(genome, frames=2)
     frames = list(anim_export.iter_frames(genome, jobs=1))
     assert len(frames) == 2
 
