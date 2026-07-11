@@ -248,7 +248,11 @@ def accumulate(
         ny = ys + dy
         # dans le cadre ET le point est assez épais pour couvrir cet offset
         m = (nx >= 0) & (nx < width) & (ny >= 0) & (ny < band_h) & (r2 >= d2)
-        flat = ny[m] * width + nx[m]
+        # ``intp`` = index natif de la plateforme : int64 sur desktop (rendu
+        # inchangé), int32 sous Pyodide/WASM — où ``np.bincount`` refuse un index
+        # int64 (cast « safe » impossible). Les indices restent < 2^31 pour toute
+        # résolution réaliste, la conversion est donc sûre.
+        flat = (ny[m] * width + nx[m]).astype(np.intp)
         acc_w_flat += np.bincount(flat, weights=weight[m], minlength=minlength)
         if acc_col_flat is not None:
             cm = colors[m]
