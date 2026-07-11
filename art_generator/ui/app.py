@@ -34,7 +34,8 @@ from ..generators import navigation
 from ..generators.genome_generator import generate
 from ..palettes import procedural
 from ..presets import library
-from . import param_form, preview
+from ..core import animation as animation_core
+from . import anim_options, param_form, preview
 
 _BACKGROUNDS = ["black", "white", "gradient", "radial"]
 _BLEND_MODES = ["normal", "add", "screen", "multiply", "difference"]
@@ -123,6 +124,15 @@ class ArtGeneratorApp(tk.Tk):
         self._result_q: queue.Queue = queue.Queue()
         self._photo: ImageTk.PhotoImage | None = None
 
+        # -- état de l'aperçu animé (lecture d'une boucle dans le canevas) --
+        self._anim_q: queue.Queue = queue.Queue()
+        self._anim_playing = False
+        self._anim_frames: list[Image.Image] | None = None
+        self._anim_index = 0
+        self._anim_play_job: str | None = None
+        self._anim_fps = 24
+        self._anim_exporting = False
+
         # -- état pan & zoom de l'aperçu --
         self._preview_image = None          # dernière image d'aperçu (PIL)
         self._view_zoom = 1.0               # 1.0 = ajusté au canevas
@@ -133,6 +143,7 @@ class ArtGeneratorApp(tk.Tk):
         self._update_title()
         self._refresh_all()
         self.after(50, self._poll_results)
+        self.after(60, self._poll_anim)
         self._schedule_render()
 
     # -- construction de l'interface -----------------------------------------
@@ -259,6 +270,38 @@ class ArtGeneratorApp(tk.Tk):
         ttk.Label(panel, text="Fond", font=("", 10, "bold")).pack(anchor="w")
         self._bg_var = self._labelled_combo(panel, "Type", _BACKGROUNDS, self._on_background)
         self._vignette_var = self._labelled_scale(panel, "Vignette", 0.0, 0.6, self._on_vignette)
+
+        self._build_animation_section(panel)
+
+    def _build_animation_section(self, panel) -> None:
+        """Section Animation : effets cochables, aperçu animé, export vidéo."""
+        ttk.Separator(panel).pack(fill="x", pady=6)
+        ttk.Label(panel, text="Animation", font=("", 10, "bold")).pack(anchor="w")
+
+        timing = ttk.Frame(panel)
+        timing.pack(fill="x", pady=2)
+        ttk.Label(timing, text="Frames", width=6).pack(side="left")
+        self._anim_frames_var = tk.StringVar(value="90")
+        ttk.Entry(timing, textvariable=self._anim_frames_var, width=5).pack(side="left")
+        ttk.Label(timing, text="  fps", width=4).pack(side="left")
+        self._anim_fps_var = tk.StringVar(value="24")
+        ttk.Entry(timing, textvariable=self._anim_fps_var, width=5).pack(side="left")
+
+        self._anim_color_var = tk.BooleanVar(value=True)
+        self._anim_bg_var = tk.BooleanVar(value=True)
+        self._anim_reveal_var = tk.BooleanVar(value=False)
+        self._anim_noise_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(panel, text="Cycle de couleur", variable=self._anim_color_var).pack(anchor="w")
+        ttk.Checkbutton(panel, text="Rotation du fond", variable=self._anim_bg_var).pack(anchor="w")
+        ttk.Checkbutton(panel, text="Particules (comète)", variable=self._anim_reveal_var).pack(anchor="w")
+        ttk.Checkbutton(panel, text="Flux de bruit", variable=self._anim_noise_var).pack(anchor="w")
+
+        controls = ttk.Frame(panel)
+        controls.pack(fill="x", pady=2)
+        self._anim_play_btn = ttk.Button(controls, text="▶ Aperçu", command=self._toggle_anim_preview)
+        self._anim_play_btn.pack(side="left", fill="x", expand=True)
+        self._anim_export_btn = ttk.Button(controls, text="Exporter…", command=self._export_animation)
+        self._anim_export_btn.pack(side="left", fill="x", expand=True)
 
     def _build_center_panel(self) -> None:
         panel = ttk.Frame(self, padding=8)
@@ -759,9 +802,153 @@ class ArtGeneratorApp(tk.Tk):
         self._refresh_all()
         self._schedule_render()
 
+    # -- animation ------------------------------------------------------------
+
+    def _anim_options_from_ui(self) -> anim_options.AnimationOptions:
+        """Lit les réglages d'animation de l'UI (valeurs invalides → défauts)."""
+        def _int(var, default):
+            try:
+                return max(1, int(str(var.get()).strip()))
+            except (ValueError, AttributeError):
+                return default
+
+        return anim_options.AnimationOptions(
+            frames=_int(self._anim_frames_var, 90),
+            fps=_int(self._anim_fps_var, 24),
+            color_cycle=self._anim_color_var.get(),
+            background_spin=self._anim_bg_var.get(),
+            particle_reveal=self._anim_reveal_var.get(),
+            noise_flow=self._anim_noise_var.get(),
+        )
+
+    def _toggle_anim_preview(self) -> None:
+        if self._anim_playing or self._anim_frames is not None:
+            self._halt_anim_preview()
+            self._schedule_render()  # revient à l'aperçu statique
+            return
+        options = self._anim_options_from_ui()
+        animated = anim_options.apply(self.genome, options)
+        if animated.animation is None:
+            self._status.configure(text="Animation : cocher au moins un effet.")
+            return
+        # Aperçu léger : plafonne le nombre de frames et rend en brouillon.
+        n = min(animated.animation.frames, 36)
+        times = [animation_core.frame_time(animated.animation, i) for i in range(n)]
+        self._anim_fps = options.fps
+        self._anim_play_btn.configure(text="⏹ Stop")
+        self._status.configure(text=f"Aperçu animé : rendu de {n} frames…")
+        if self._render_job is not None:
+            self.after_cancel(self._render_job)
+            self._render_job = None
+        self._stop_spinner()
+        self._request_id += 1  # invalide tout rendu statique en vol (ne pas écraser)
+
+        def work() -> None:
+            try:
+                frames = []
+                for k, t in enumerate(times, start=1):
+                    static = animation_core.evaluate(animated, t)
+                    frames.append(preview.render_preview(static, point_cap=preview.DRAFT_POINT_CAP))
+                    self._anim_q.put(("progress", k, len(times)))
+                self._anim_q.put(("ready", frames))
+            except Exception as exc:  # pragma: no cover - robustesse UI
+                self._anim_q.put(("error", exc))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _start_anim_playback(self, frames: list[Image.Image]) -> None:
+        if not frames:
+            return
+        self._anim_frames = frames
+        self._anim_index = 0
+        self._anim_playing = True
+        self._advance_anim()
+
+    def _advance_anim(self) -> None:
+        if not self._anim_playing or not self._anim_frames:
+            return
+        self._preview_image = self._anim_frames[self._anim_index]
+        self._draw_preview()
+        self._anim_index = (self._anim_index + 1) % len(self._anim_frames)
+        delay = max(20, round(1000 / max(1, self._anim_fps)))
+        self._anim_play_job = self.after(delay, self._advance_anim)
+
+    def _halt_anim_preview(self) -> None:
+        """Arrête la lecture de l'aperçu animé (sans reprogrammer de rendu)."""
+        if self._anim_play_job is not None:
+            self.after_cancel(self._anim_play_job)
+            self._anim_play_job = None
+        self._anim_playing = False
+        self._anim_frames = None
+        if hasattr(self, "_anim_play_btn"):
+            self._anim_play_btn.configure(text="▶ Aperçu")
+
+    def _export_animation(self) -> None:
+        if self._anim_exporting:
+            return
+        options = self._anim_options_from_ui()
+        animated = anim_options.apply(self.genome, options)
+        if animated.animation is None:
+            messagebox.showinfo("Animation", "Cocher au moins un effet à animer.")
+            return
+        path = filedialog.asksaveasfilename(
+            defaultextension=".gif",
+            filetypes=[("GIF animé", "*.gif"), ("Vidéo MP4", "*.mp4"),
+                       ("Séquence PNG (dossier)", "*")],
+        )
+        if not path:
+            return
+        self._halt_anim_preview()
+        self._anim_exporting = True
+        self._anim_export_btn.state(["disabled"])
+        self._status.configure(text="Export de l'animation…")
+
+        def report(done: int, total: int) -> None:
+            self._anim_q.put(("export_progress", done, total))
+
+        def work() -> None:
+            from ..exporters import animation as animation_export
+            try:
+                out = animation_export.save_animation(animated, path, jobs=1, progress=report)
+                self._anim_q.put(("export_done", out))
+            except Exception as exc:  # pragma: no cover - dépend de l'environnement
+                self._anim_q.put(("export_error", exc))
+
+        threading.Thread(target=work, daemon=True).start()
+
+    def _poll_anim(self) -> None:
+        """Draine la file de l'animation (aperçu + export) sur le thread principal."""
+        try:
+            while True:
+                kind, *rest = self._anim_q.get_nowait()
+                if kind == "progress":
+                    done, total = rest
+                    self._status.configure(text=f"Aperçu animé : rendu {done}/{total}…")
+                elif kind == "ready":
+                    self._start_anim_playback(rest[0])
+                    self._status.configure(text="Aperçu animé (boucle). ▶/⏹ pour arrêter.")
+                elif kind == "error":
+                    self._halt_anim_preview()
+                    self._status.configure(text=f"Aperçu animé — erreur : {rest[0]}")
+                elif kind == "export_progress":
+                    done, total = rest
+                    self._status.configure(text=f"Export animation : {done}/{total} frames…")
+                elif kind == "export_done":
+                    self._anim_exporting = False
+                    self._anim_export_btn.state(["!disabled"])
+                    self._status.configure(text=f"Animation exportée : {rest[0]}")
+                elif kind == "export_error":
+                    self._anim_exporting = False
+                    self._anim_export_btn.state(["!disabled"])
+                    self._status.configure(text=f"Export animation — erreur : {rest[0]}")
+        except queue.Empty:
+            pass
+        self.after(60, self._poll_anim)
+
     # -- rendu d'aperçu (débouncé, hors thread principal) --------------------
 
     def _schedule_render(self) -> None:
+        self._halt_anim_preview()  # une édition reprend l'aperçu statique
         if self._render_job is not None:
             self.after_cancel(self._render_job)
         self._render_job = self.after(_DEBOUNCE_MS, self._start_render)

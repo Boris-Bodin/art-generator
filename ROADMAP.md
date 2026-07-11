@@ -296,9 +296,19 @@ ne « saute » pas, seuls les champs ciblés par une piste évoluent.
       `imageio`/`imageio-ffmpeg` (import paresseux, dépendance **optionnelle**).
       Une animation « spin » par défaut s'applique aux génomes sans piste.
 
+- [x] **Animation dans l'UI** (`ui/anim_options.py` — logique pure testable,
+      câblée dans `ui/app.py`) : section « Animation » avec effets cochables
+      (cycle de couleur, rotation du fond, particules en comète via `reveal`,
+      flux de bruit via `noise_z`/`noise_3d`), **aperçu animé** joué en boucle
+      dans le canevas (frames brouillon rendues hors thread) et **export**
+      GIF/MP4/séquence PNG hors thread avec progression. `anim_options.apply`
+      renvoie une copie animée sans muter le génome ; l'export réutilise
+      `exporters/animation.py` (callback `progress`).
+
   Reste ouvert : **taille/opacité par particule au fil de la vie** (nécessiterait
   d'étendre le contrat `sample(n)->(points, values)` par un canal de poids) ; un
-  **éditeur de timeline** dans l'UI Tkinter/Web ; l'export animé côté **Web**
+  **éditeur de timeline par image-clé** (l'UI actuelle propose des effets
+  prédéfinis, pas l'édition de pistes arbitraires) ; l'export animé côté **Web**
   (Pyodide : GIF lourd, MP4 indisponible en WASM).
 
 ## Dette technique connue

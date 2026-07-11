@@ -77,36 +77,52 @@ def _resolve_jobs(jobs: int | None, n_frames: int) -> int:
 
 
 def iter_frames(
-    genome: ArtworkGenome, jobs: int | None = None, tile: str = "auto"
+    genome: ArtworkGenome,
+    jobs: int | None = None,
+    tile: str = "auto",
+    progress: "callable | None" = None,
 ) -> Iterator[Image.Image]:
     """Itère les frames de l'animation, dans l'ordre, éventuellement en parallèle.
 
     Utilise ``genome.animation`` ; à défaut, une animation « spin » par défaut.
     Les frames sortent **en ordre** (``ProcessPoolExecutor.map`` le garantit), ce
     qui permet de les écrire au fil de l'eau (MP4, PNG) sans tout charger en RAM.
+
+    ``progress`` (optionnel) est appelé ``progress(done, total)`` après chaque
+    frame — utile pour une barre d'avancement dans l'UI.
     """
     animation = _ensure_animation(genome)
     times = [frame_time(animation, i) for i in range(max(1, animation.frames))]
-    effective = _resolve_jobs(jobs, len(times))
+    total = len(times)
+    effective = _resolve_jobs(jobs, total)
+
+    def _emit(source):
+        for done, img in enumerate(source, start=1):
+            if progress is not None:
+                progress(done, total)
+            yield img
+
     if effective <= 1:
-        for t in times:
-            yield _render_frame(genome, t, tile)
+        yield from _emit(_render_frame(genome, t, tile) for t in times)
         return
     with ProcessPoolExecutor(max_workers=effective) as pool:
-        yield from pool.map(_render_frame, repeat(genome), times, repeat(tile))
+        yield from _emit(pool.map(_render_frame, repeat(genome), times, repeat(tile)))
 
 
 # --- écrivains --------------------------------------------------------------
 
 
-def save_gif(genome: ArtworkGenome, path: str | Path, jobs: int | None = None) -> Path:
+def save_gif(
+    genome: ArtworkGenome, path: str | Path, jobs: int | None = None,
+    progress: "callable | None" = None,
+) -> Path:
     """Écrit un GIF animé (Pillow, 256 couleurs, palette adaptative par frame)."""
     animation = _ensure_animation(genome)
     path = Path(path)
     path.parent.mkdir(parents=True, exist_ok=True)
     frames = [
         img.convert("P", palette=Image.ADAPTIVE)
-        for img in iter_frames(genome, jobs=jobs)
+        for img in iter_frames(genome, jobs=jobs, progress=progress)
     ]
     duration = round(1000.0 / max(1, animation.fps))
     frames[0].save(
@@ -122,17 +138,21 @@ def save_gif(genome: ArtworkGenome, path: str | Path, jobs: int | None = None) -
 
 
 def save_png_sequence(
-    genome: ArtworkGenome, out_dir: str | Path, jobs: int | None = None, dpi: int = 300
+    genome: ArtworkGenome, out_dir: str | Path, jobs: int | None = None, dpi: int = 300,
+    progress: "callable | None" = None,
 ) -> Path:
     """Écrit une séquence ``frame_0001.png`` … dans ``out_dir``."""
     out_dir = Path(out_dir)
     out_dir.mkdir(parents=True, exist_ok=True)
-    for i, img in enumerate(iter_frames(genome, jobs=jobs), start=1):
+    for i, img in enumerate(iter_frames(genome, jobs=jobs, progress=progress), start=1):
         img.save(out_dir / f"frame_{i:04d}.png", dpi=(dpi, dpi))
     return out_dir
 
 
-def save_mp4(genome: ArtworkGenome, path: str | Path, jobs: int | None = None) -> Path:
+def save_mp4(
+    genome: ArtworkGenome, path: str | Path, jobs: int | None = None,
+    progress: "callable | None" = None,
+) -> Path:
     """Écrit un MP4 (H.264) via ``imageio``/``imageio-ffmpeg`` (dépendance optionnelle)."""
     try:
         import imageio.v2 as imageio  # import paresseux : dépendance optionnelle
@@ -150,7 +170,7 @@ def save_mp4(genome: ArtworkGenome, path: str | Path, jobs: int | None = None) -
     # macro_block_size=None : ne force pas les dimensions à un multiple de 16.
     writer = imageio.get_writer(path, fps=animation.fps, macro_block_size=None)
     try:
-        for img in iter_frames(genome, jobs=jobs):
+        for img in iter_frames(genome, jobs=jobs, progress=progress):
             writer.append_data(np.asarray(img))
     finally:
         writer.close()
@@ -161,7 +181,8 @@ _DISPATCH = {".gif": save_gif, ".mp4": save_mp4, ".webm": save_mp4}
 
 
 def save_animation(
-    genome: ArtworkGenome, path: str | Path, jobs: int | None = None, dpi: int = 300
+    genome: ArtworkGenome, path: str | Path, jobs: int | None = None, dpi: int = 300,
+    progress: "callable | None" = None,
 ) -> Path:
     """Écrit l'animation ; le format découle de l'extension.
 
@@ -170,7 +191,7 @@ def save_animation(
     path = Path(path)
     writer = _DISPATCH.get(path.suffix.lower())
     if writer is save_mp4:
-        return save_mp4(genome, path, jobs=jobs)
+        return save_mp4(genome, path, jobs=jobs, progress=progress)
     if writer is save_gif:
-        return save_gif(genome, path, jobs=jobs)
-    return save_png_sequence(genome, path, jobs=jobs, dpi=dpi)
+        return save_gif(genome, path, jobs=jobs, progress=progress)
+    return save_png_sequence(genome, path, jobs=jobs, dpi=dpi, progress=progress)
