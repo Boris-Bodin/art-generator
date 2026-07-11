@@ -179,8 +179,8 @@ class ArtGeneratorApp(tk.Tk):
             self._editor_widgets.append(combo)
         return var
 
-    def _format_combo(self, parent, label, values):
-        """Ligne étiquette + combobox de format ; applique la taille à la sélection.
+    def _format_combo(self, parent, label, values, command):
+        """Ligne étiquette + combobox de format ; ``command`` s'exécute à la sélection.
 
         Renvoie ``(StringVar, Combobox)`` : la combobox est conservée pour lui
         ajouter, au besoin, la valeur courante du génome quand elle sort de la
@@ -192,7 +192,7 @@ class ArtGeneratorApp(tk.Tk):
         var = tk.StringVar()
         combo = ttk.Combobox(row, textvariable=var, values=values, state="readonly")
         combo.pack(side="left", fill="x", expand=True)
-        combo.bind("<<ComboboxSelected>>", lambda _e: self._apply_format())
+        combo.bind("<<ComboboxSelected>>", lambda _e: command())
         return var, combo
 
     def _build_left_panel(self) -> None:
@@ -249,9 +249,11 @@ class ArtGeneratorApp(tk.Tk):
         ttk.Separator(panel).pack(fill="x", pady=6)
         ttk.Label(panel, text="Format", font=("", 10, "bold")).pack(anchor="w")
         self._resolution_var, self._resolution_combo = self._format_combo(
-            panel, "Résolution", _RES_LABEL_LIST
+            panel, "Résolution", _RES_LABEL_LIST, self._on_resolution_preset
         )
-        self._ratio_var, self._ratio_combo = self._format_combo(panel, "Ratio", _RATIOS)
+        self._ratio_var, self._ratio_combo = self._format_combo(
+            panel, "Ratio", _RATIOS, self._apply_format
+        )
 
         ttk.Separator(panel).pack(fill="x", pady=6)
         ttk.Label(panel, text="Fond", font=("", 10, "bold")).pack(anchor="w")
@@ -372,6 +374,20 @@ class ArtGeneratorApp(tk.Tk):
         values = base if value in base else [*base, value]
         combo["values"] = values
         var.set(value)
+
+    def _on_resolution_preset(self) -> None:
+        """Sélection d'un préréglage : s'il porte son propre ratio, le refléter.
+
+        Ainsi choisir « Displate » bascule le combo Ratio sur ``1:1.4`` ; changer
+        ensuite le Ratio prime (handler distinct, non écrasé). Les préréglages sans
+        ratio propre laissent le Ratio courant inchangé.
+        """
+        key = _RES_LABEL_TO_KEY.get(self._resolution_var.get())
+        if key is not None:
+            preset_ratio = resolution.PRESETS[key].ratio
+            if preset_ratio is not None:
+                self._fill_combo(self._ratio_combo, self._ratio_var, preset_ratio, _RATIOS)
+        self._apply_format()
 
     def _apply_format(self) -> None:
         if self._loading:
