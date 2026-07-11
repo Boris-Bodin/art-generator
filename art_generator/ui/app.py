@@ -34,7 +34,7 @@ from ..generators import navigation
 from ..generators.genome_generator import generate
 from ..palettes import procedural
 from ..presets import library
-from . import preview
+from . import param_form, preview
 
 _BACKGROUNDS = ["black", "white", "gradient", "radial"]
 _BLEND_MODES = ["normal", "add", "screen", "multiply", "difference"]
@@ -592,31 +592,71 @@ class ArtGeneratorApp(tk.Tk):
         self._schedule_render()
 
     def _edit_params(self) -> None:
+        """Formulaire typé des paramètres d'équation (un champ par paramètre).
+
+        Le type de chaque widget (case à cocher, liste de choix, saisie) est
+        inféré par :mod:`ui.param_form` depuis la valeur courante ; les dicts
+        imbriqués (émetteur de particules…) sont aplatis en chemins pointés.
+        """
         if not self.genome.layers:
             return
+        layer = self._layer
+        fields = param_form.describe(layer.equation_params, layer.equation_family)
+
         editor = tk.Toplevel(self)
         editor.title("Paramètres équation")
         editor.transient(self)
-        editor.geometry("520x420")
+        editor.geometry("460x520")
         editor.columnconfigure(0, weight=1)
         editor.rowconfigure(0, weight=1)
 
-        text = tk.Text(editor, wrap="none", undo=True)
-        text.grid(row=0, column=0, sticky="nsew", padx=8, pady=8)
-        text.insert("1.0", json.dumps(self._layer.equation_params, indent=2, ensure_ascii=False))
+        # Zone défilante : les familles riches (particules) ont beaucoup de champs.
+        canvas = tk.Canvas(editor, highlightthickness=0)
+        scroll = ttk.Scrollbar(editor, orient="vertical", command=canvas.yview)
+        form = ttk.Frame(canvas, padding=8)
+        form.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
+        window = canvas.create_window((0, 0), window=form, anchor="nw")
+        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
+        canvas.configure(yscrollcommand=scroll.set)
+        canvas.grid(row=0, column=0, sticky="nsew")
+        scroll.grid(row=0, column=1, sticky="ns")
+        form.columnconfigure(1, weight=1)
+
+        getters = []  # [(Field, callable -> valeur brute du widget)]
+        for i, fld in enumerate(fields):
+            ttk.Label(form, text=fld.label, width=16).grid(row=i, column=0, sticky="w", pady=3)
+            if fld.kind == "bool":
+                var = tk.BooleanVar(value=bool(fld.value))
+                ttk.Checkbutton(form, variable=var).grid(row=i, column=1, sticky="w")
+            elif fld.kind == "choice":
+                var = tk.StringVar(value=str(fld.value))
+                ttk.Combobox(form, textvariable=var, values=list(fld.choices),
+                             state="readonly").grid(row=i, column=1, sticky="ew")
+            else:
+                text = json.dumps(fld.value, ensure_ascii=False) if fld.kind == "json" else str(fld.value)
+                var = tk.StringVar(value=text)
+                ttk.Entry(form, textvariable=var).grid(row=i, column=1, sticky="ew")
+            getters.append((fld, var.get))
+
+        if not fields:
+            ttk.Label(form, text="Aucun paramètre pour cette équation.").grid(row=0, column=0)
 
         buttons = ttk.Frame(editor, padding=(8, 0, 8, 8))
-        buttons.grid(row=1, column=0, sticky="ew")
+        buttons.grid(row=1, column=0, columnspan=2, sticky="ew")
 
         def apply() -> None:
-            try:
-                data = json.loads(text.get("1.0", "end"))
-                if not isinstance(data, dict):
-                    raise ValueError("Les paramètres doivent être un objet JSON.")
-            except Exception as exc:
-                messagebox.showerror("Paramètres équation", str(exc), parent=editor)
-                return
-            self._layer.equation_params = data
+            updates = []
+            for fld, get in getters:
+                try:
+                    updates.append((fld.path, param_form.coerce(fld.kind, get())))
+                except Exception as exc:
+                    messagebox.showerror(
+                        "Paramètres équation",
+                        f"Champ « {fld.label} » invalide : {exc}",
+                        parent=editor,
+                    )
+                    return
+            layer.equation_params = param_form.assemble(layer.equation_params, updates)
             self._mark_dirty()
             self._refresh_all()
             self._schedule_render()
