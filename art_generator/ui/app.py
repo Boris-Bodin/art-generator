@@ -67,6 +67,13 @@ _RES_KEY_FOR_EDGE = {resolution.PRESETS[k].long_edge: k for k in _RES_KEYS}
 _DEBOUNCE_MS = 300
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
+# Aperçu animé : petite résolution + peu de points pour un rendu **vif** (chaque
+# frame doit coûter une fraction de seconde, sinon la boucle met trop longtemps à
+# démarrer). L'export garde le génome pleine résolution.
+_ANIM_PREVIEW_SIDE = 400
+_ANIM_PREVIEW_FRAMES = 24
+_ANIM_PREVIEW_POINT_CAP = 70_000
+
 
 def _layer_detail(layer: LayerGenome) -> str:
     params = layer.equation_params
@@ -129,6 +136,8 @@ class ArtGeneratorApp(tk.Tk):
         self._anim_playing = False
         self._anim_frames: list[Image.Image] | None = None
         self._anim_index = 0
+        self._anim_total = 0
+        self._anim_gen_id = 0  # génération : ignore les frames d'un aperçu périmé
         self._anim_play_job: str | None = None
         self._anim_fps = 24
         self._anim_exporting = False
@@ -206,28 +215,60 @@ class ArtGeneratorApp(tk.Tk):
         combo.bind("<<ComboboxSelected>>", lambda _e: command())
         return var, combo
 
-    def _build_left_panel(self) -> None:
-        # Panneau défilant : les sections cumulées (jusqu'à Animation) dépassent la
-        # hauteur de la fenêtre ; un canevas + scrollbar évite de couper le bas.
+    def _make_scroll_panel(self, column: int):
+        """Panneau vertical **défilant à la demande** dans la colonne donnée.
+
+        Renvoie ``(inner, canvas)`` : on empile les widgets dans ``inner``. La
+        scrollbar n'apparaît **que si le contenu dépasse** la hauteur visible
+        (fenêtre assez grande ⇒ pas de scroll) ; la molette est liée à ce canevas.
+        """
         outer = ttk.Frame(self)
-        outer.grid(row=0, column=0, sticky="ns")
+        outer.grid(row=0, column=column, sticky="ns")
         outer.rowconfigure(0, weight=1)
-        left_canvas = tk.Canvas(outer, highlightthickness=0)
-        vsb = ttk.Scrollbar(outer, orient="vertical", command=left_canvas.yview)
-        left_canvas.configure(yscrollcommand=vsb.set)
-        left_canvas.grid(row=0, column=0, sticky="ns")
-        vsb.grid(row=0, column=1, sticky="ns")
+        canvas = tk.Canvas(outer, highlightthickness=0)
+        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        canvas.grid(row=0, column=0, sticky="ns")
 
-        panel = ttk.Frame(left_canvas, padding=8)
-        window = left_canvas.create_window((0, 0), window=panel, anchor="nw")
+        inner = ttk.Frame(canvas, padding=8)
+        window = canvas.create_window((0, 0), window=inner, anchor="nw")
 
-        def _on_panel_configure(_e=None) -> None:
-            left_canvas.configure(scrollregion=left_canvas.bbox("all"),
-                                  width=panel.winfo_reqwidth())
+        def _sync(_e=None) -> None:
+            canvas.configure(scrollregion=canvas.bbox("all"), width=inner.winfo_reqwidth())
+            overflow = inner.winfo_reqheight() > canvas.winfo_height()
+            if overflow:
+                vsb.grid(row=0, column=1, sticky="ns")
+            else:
+                vsb.grid_remove()
+                canvas.yview_moveto(0.0)  # recale en haut quand plus besoin de scroll
 
-        panel.bind("<Configure>", _on_panel_configure)
-        left_canvas.bind("<Configure>", lambda e: left_canvas.itemconfigure(window, width=e.width))
-        self._left_canvas = left_canvas
+        inner.bind("<Configure>", _sync)
+        canvas.bind("<Configure>", lambda e: (canvas.itemconfigure(window, width=e.width), _sync()))
+        return inner, canvas
+
+    def _bind_wheel(self, widget, canvas) -> None:
+        """Lie la molette au défilement de ``canvas``, récursivement sur le sous-arbre.
+
+        Scopé à ce panneau (ne touche pas au zoom molette du canevas central) et
+        inerte quand le contenu tient entièrement (rien à faire défiler).
+        """
+        def _scroll(event) -> str | None:
+            first, last = canvas.yview()
+            if first <= 0.0 and last >= 1.0:
+                return None  # tout est visible : ne pas capturer la molette
+            canvas.yview_scroll(-1 if event.delta > 0 else 1, "units")
+            return "break"
+
+        widget.bind("<MouseWheel>", _scroll)
+        widget.bind("<Button-4>", lambda _e: canvas.yview_scroll(-1, "units"))
+        widget.bind("<Button-5>", lambda _e: canvas.yview_scroll(1, "units"))
+        for child in widget.winfo_children():
+            self._bind_wheel(child, canvas)
+
+    def _build_left_panel(self) -> None:
+        # Panneau défilant à la demande : les sections cumulées (jusqu'à Animation)
+        # peuvent dépasser la hauteur de la fenêtre.
+        panel, self._left_canvas = self._make_scroll_panel(0)
 
         ttk.Label(panel, text="Œuvre", font=("", 11, "bold")).pack(anchor="w")
 
@@ -291,24 +332,7 @@ class ArtGeneratorApp(tk.Tk):
         self._vignette_var = self._labelled_scale(panel, "Vignette", 0.0, 0.6, self._on_vignette)
 
         self._build_animation_section(panel)
-        self._bind_left_wheel(panel)
-
-    def _bind_left_wheel(self, widget) -> None:
-        """Lie la molette au défilement du panneau gauche, récursivement.
-
-        Scopé à ce sous-arbre : n'interfère pas avec le zoom molette du canevas
-        central (qui a sa propre liaison).
-        """
-        def _scroll(event) -> str:
-            step = -1 if event.delta > 0 else 1
-            self._left_canvas.yview_scroll(step, "units")
-            return "break"
-
-        widget.bind("<MouseWheel>", _scroll)
-        widget.bind("<Button-4>", lambda _e: (self._left_canvas.yview_scroll(-1, "units"), "break")[1])
-        widget.bind("<Button-5>", lambda _e: (self._left_canvas.yview_scroll(1, "units"), "break")[1])
-        for child in widget.winfo_children():
-            self._bind_left_wheel(child)
+        self._bind_wheel(panel, self._left_canvas)
 
     def _build_animation_section(self, panel) -> None:
         """Section Animation : effets cochables, aperçu animé, export vidéo."""
@@ -359,8 +383,7 @@ class ArtGeneratorApp(tk.Tk):
         self._status.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
     def _build_right_panel(self) -> None:
-        panel = ttk.Frame(self, padding=8)
-        panel.grid(row=0, column=2, sticky="ns")
+        panel, self._right_canvas = self._make_scroll_panel(2)
 
         ttk.Label(panel, text="Couche", font=("", 11, "bold")).pack(anchor="w")
         self._layer_var = tk.StringVar()
@@ -403,6 +426,8 @@ class ArtGeneratorApp(tk.Tk):
         self._warp_var = self._labelled_scale(panel, "Warp", 0.0, 0.6, lambda v: self._set_layer("warp", v), register=True)
         self._cnoise_var = self._labelled_scale(panel, "Bruit coul.", 0.0, 0.6, lambda v: self._set_layer("color_noise", v), register=True)
         self._lnoise_var = self._labelled_scale(panel, "Bruit lum.", 0.0, 1.0, lambda v: self._set_layer("light_noise", v), register=True)
+
+        self._bind_wheel(panel, self._right_canvas)
 
     # -- synchronisation widgets <-> génome ----------------------------------
 
@@ -868,42 +893,43 @@ class ArtGeneratorApp(tk.Tk):
         if animated.animation is None:
             self._status.configure(text="Animation : cocher au moins un effet.")
             return
-        # Aperçu léger : plafonne le nombre de frames et rend en brouillon.
-        n = min(animated.animation.frames, 36)
+        # Aperçu léger : peu de frames, petite résolution → chaque frame coûte une
+        # fraction de seconde, et la boucle démarre dès les 2 premières frames.
+        n = min(animated.animation.frames, _ANIM_PREVIEW_FRAMES)
         times = [animation_core.frame_time(animated.animation, i) for i in range(n)]
         self._anim_fps = options.fps
         self._anim_play_btn.configure(text="⏹ Stop")
-        self._status.configure(text=f"Aperçu animé : rendu de {n} frames…")
+        self._status.configure(text=f"Aperçu animé : rendu 0/{n}…")
         if self._render_job is not None:
             self.after_cancel(self._render_job)
             self._render_job = None
         self._stop_spinner()
         self._request_id += 1  # invalide tout rendu statique en vol (ne pas écraser)
 
+        self._anim_gen_id += 1
+        gen = self._anim_gen_id
+        self._anim_frames = []
+        self._anim_index = 0
+        self._anim_total = n
+
         def work() -> None:
             try:
-                frames = []
-                for k, t in enumerate(times, start=1):
+                for t in times:
                     static = animation_core.evaluate(animated, t)
-                    frames.append(preview.render_preview(static, point_cap=preview.DRAFT_POINT_CAP))
-                    self._anim_q.put(("progress", k, len(times)))
-                self._anim_q.put(("ready", frames))
+                    img = preview.render_preview(
+                        static, max_side=_ANIM_PREVIEW_SIDE, point_cap=_ANIM_PREVIEW_POINT_CAP
+                    )
+                    self._anim_q.put(("frame", gen, img))
+                self._anim_q.put(("done", gen))
             except Exception as exc:  # pragma: no cover - robustesse UI
-                self._anim_q.put(("error", exc))
+                self._anim_q.put(("error", gen, exc))
 
         threading.Thread(target=work, daemon=True).start()
-
-    def _start_anim_playback(self, frames: list[Image.Image]) -> None:
-        if not frames:
-            return
-        self._anim_frames = frames
-        self._anim_index = 0
-        self._anim_playing = True
-        self._advance_anim()
 
     def _advance_anim(self) -> None:
         if not self._anim_playing or not self._anim_frames:
             return
+        self._anim_index %= len(self._anim_frames)
         self._preview_image = self._anim_frames[self._anim_index]
         self._draw_preview()
         self._anim_index = (self._anim_index + 1) % len(self._anim_frames)
@@ -912,6 +938,7 @@ class ArtGeneratorApp(tk.Tk):
 
     def _halt_anim_preview(self) -> None:
         """Arrête la lecture de l'aperçu animé (sans reprogrammer de rendu)."""
+        self._anim_gen_id += 1  # les frames encore en vol seront ignorées
         if self._anim_play_job is not None:
             self.after_cancel(self._anim_play_job)
             self._anim_play_job = None
@@ -958,15 +985,28 @@ class ArtGeneratorApp(tk.Tk):
         try:
             while True:
                 kind, *rest = self._anim_q.get_nowait()
-                if kind == "progress":
-                    done, total = rest
-                    self._status.configure(text=f"Aperçu animé : rendu {done}/{total}…")
-                elif kind == "ready":
-                    self._start_anim_playback(rest[0])
+                if kind == "frame":
+                    gen, img = rest
+                    if gen != self._anim_gen_id or self._anim_frames is None:
+                        continue  # aperçu périmé ou arrêté
+                    self._anim_frames.append(img)
+                    done = len(self._anim_frames)
+                    self._status.configure(text=f"Aperçu animé : rendu {done}/{self._anim_total}…")
+                    if not self._anim_playing and done >= 2:
+                        self._anim_playing = True  # démarre dès 2 frames
+                        self._advance_anim()
+                elif kind == "done":
+                    if rest[0] != self._anim_gen_id:
+                        continue
+                    if not self._anim_playing and self._anim_frames:
+                        self._anim_playing = True  # cas < 2 frames
+                        self._advance_anim()
                     self._status.configure(text="Aperçu animé (boucle). ▶/⏹ pour arrêter.")
                 elif kind == "error":
+                    if rest[0] != self._anim_gen_id:
+                        continue
                     self._halt_anim_preview()
-                    self._status.configure(text=f"Aperçu animé — erreur : {rest[0]}")
+                    self._status.configure(text=f"Aperçu animé — erreur : {rest[1]}")
                 elif kind == "export_progress":
                     done, total = rest
                     self._status.configure(text=f"Export animation : {done}/{total} frames…")
