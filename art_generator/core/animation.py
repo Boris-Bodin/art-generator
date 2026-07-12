@@ -24,7 +24,12 @@ import copy
 from dataclasses import is_dataclass
 from typing import Any
 
-from .genome import AnimationGenome, ArtworkGenome, Track
+import numpy as np
+
+from .genome import AnimationGenome, ArtworkGenome, Keyframe, Track
+
+# Keyframes échantillonnant la rotation d'un dégradé (couleurs le long des arrêts).
+_GRADIENT_CYCLE_STEPS = 12
 
 # --- résolution de chemin dans le génome ------------------------------------
 #
@@ -111,9 +116,13 @@ def _lerp(a: float, b: float, u: float) -> float:
 
 
 def _blend(a: Any, b: Any, u: float) -> Any:
-    """Interpole entre deux valeurs (scalaires ou listes) élément par élément."""
+    """Interpole entre deux valeurs, récursivement pour les listes imbriquées.
+
+    Gère scalaires, vecteurs (ex. ``phase``) et listes de listes (ex. arrêts d'un
+    dégradé ``[[pos, r, g, b], …]``).
+    """
     if isinstance(a, (list, tuple)) and isinstance(b, (list, tuple)):
-        return [_lerp(float(x), float(y), u) for x, y in zip(a, b)]
+        return [_blend(x, y, u) for x, y in zip(a, b)]
     return _lerp(float(a), float(b), u)
 
 
@@ -182,6 +191,57 @@ def evaluate(genome: ArtworkGenome, t: float) -> ArtworkGenome:
 
 
 # --- horloge ----------------------------------------------------------------
+
+
+def _gradient_cycle_track(index: int, palette) -> Track:
+    """Piste faisant **tourner les couleurs** d'un dégradé le long de ses arrêts.
+
+    Le mode ``gradient`` ignore ``phase`` : on garde les positions des arrêts et on
+    y fait défiler les couleurs (dégradé traité cycliquement). Un tour complet
+    revient au départ ⇒ boucle sans couture. Positions fixes d'une keyframe à
+    l'autre (seules les couleurs changent) : interpolation linéaire valide.
+    """
+    stops = [list(s) for s in palette.stops]
+    order = np.argsort([s[0] for s in stops])
+    ppos = np.array([stops[o][0] for o in order], dtype=np.float64)
+    pcol = np.array([stops[o][1:] for o in order], dtype=np.float64)  # (S, 3)
+    ext_pos = np.concatenate(([ppos[-1] - 1.0], ppos, [ppos[0] + 1.0]))  # échantillonnage cyclique
+    ext_col = np.concatenate((pcol[-1:], pcol, pcol[:1]), axis=0)
+    orig = np.array([s[0] for s in stops], dtype=np.float64)
+
+    def sample(query: np.ndarray) -> np.ndarray:
+        q = query % 1.0
+        return np.stack([np.interp(q, ext_pos, ext_col[:, c]) for c in range(3)], axis=-1)
+
+    keyframes = []
+    for j in range(_GRADIENT_CYCLE_STEPS + 1):
+        p = j / _GRADIENT_CYCLE_STEPS
+        cols = sample(orig - p)
+        keyframes.append(Keyframe(p, [
+            [float(orig[k]), float(cols[k, 0]), float(cols[k, 1]), float(cols[k, 2])]
+            for k in range(len(stops))
+        ]))
+    return Track(f"layers.{index}.palette.stops", keyframes)
+
+
+def color_cycle_track(index: int, layer) -> Track:
+    """Piste de cyclage couleur d'une couche, **adaptée à son mode de palette**.
+
+    hsv/hsl → teinte parcourue ; cosine → phase ; gradient → rotation des couleurs
+    des arrêts (:func:`_gradient_cycle_track`). Rend le cyclage visible quel que
+    soit le mode (le gradient, très courant, ignorerait ``phase``).
+    """
+    palette = layer.palette
+    if palette.mode in ("hsv", "hsl"):
+        h0 = float(palette.hue[0])
+        return Track(f"layers.{index}.palette.hue.0", [Keyframe(0.0, h0), Keyframe(1.0, h0 + 1.0)])
+    if palette.mode == "gradient" and palette.stops:
+        return _gradient_cycle_track(index, palette)
+    phase = list(palette.phase)  # cosine
+    return Track(
+        f"layers.{index}.palette.phase",
+        [Keyframe(0.0, phase), Keyframe(1.0, [p + 1.0 for p in phase])],
+    )
 
 
 def frame_time(animation: AnimationGenome, index: int) -> float:

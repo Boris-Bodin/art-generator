@@ -74,6 +74,32 @@ def test_result_renders_frames():
     assert not np.array_equal(a, b)  # les frames diffèrent
 
 
+def test_gradient_palette_color_cycle_targets_stops():
+    genome = ag.generate(42, 96, 96)
+    genome.layers[0].palette.mode = "gradient"
+    genome.layers[0].palette.stops = [[0.0, 0.1, 0.2, 0.3], [0.5, 0.7, 0.2, 0.1],
+                                      [1.0, 0.2, 0.6, 0.9]]
+    out = anim_options.apply(genome, AnimationOptions(color_cycle=True,
+                                                      background_spin=False))
+    track = out.animation.tracks[0]
+    assert track.target == "layers.0.palette.stops"
+    # les couleurs tournent : arrêts différents en cours de cycle, mais bouclés
+    v0 = animation_core.track_value(track, 0.0)
+    vmid = animation_core.track_value(track, 0.5)
+    v1 = animation_core.track_value(track, 1.0)
+    assert v0 != vmid
+    assert v0 == v1  # sans couture
+
+
+def test_black_bg_gradient_seed_animates():
+    # seed 766970633 : fond noir + 3 couches gradient — ne s'animait pas.
+    genome = ag.generate(766970633, 160, 160)
+    out = anim_options.apply(genome, AnimationOptions())
+    a = np.asarray(Engine().render(animation_core.evaluate(out, 0.0))).astype(int)
+    b = np.asarray(Engine().render(animation_core.evaluate(out, 0.5))).astype(int)
+    assert np.abs(a - b).mean() > 1.0  # ça bouge nettement
+
+
 def test_iter_frames_progress_callback():
     genome = ag.generate(42, 64, 64)
     out = anim_options.apply(genome, AnimationOptions(frames=3))

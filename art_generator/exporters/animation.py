@@ -24,7 +24,7 @@ from typing import Iterator
 
 from PIL import Image
 
-from ..core.animation import evaluate, frame_time
+from ..core.animation import color_cycle_track, evaluate, frame_time
 from ..core.engine import Engine
 from ..core.genome import AnimationGenome, ArtworkGenome, Keyframe, Track
 
@@ -43,19 +43,7 @@ def default_spin_animation(
     tau = 6.283185307179586
     tracks = [Track("background_params.angle", [Keyframe(0.0, 0.0), Keyframe(1.0, tau)])]
     for i, layer in enumerate(genome.layers):
-        if layer.palette.mode in ("hsv", "hsl"):
-            h0 = float(layer.palette.hue[0])
-            tracks.append(
-                Track(f"layers.{i}.palette.hue.0", [Keyframe(0.0, h0), Keyframe(1.0, h0 + 1.0)])
-            )
-        else:  # cosine (ou gradient : phase ignorée, sans effet mais inoffensif)
-            phase = list(layer.palette.phase)
-            tracks.append(
-                Track(
-                    f"layers.{i}.palette.phase",
-                    [Keyframe(0.0, phase), Keyframe(1.0, [p + 1.0 for p in phase])],
-                )
-            )
+        tracks.append(color_cycle_track(i, layer))  # gère hsv/hsl/cosine/gradient
     return AnimationGenome(fps=fps, frames=frames, loop=True, tracks=tracks)
 
 

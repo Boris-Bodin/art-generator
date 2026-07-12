@@ -86,6 +86,12 @@ def test_default_spin_cycles_color_per_palette_mode():
     targets = {t.target for t in anim.tracks}
     assert "layers.0.palette.phase" in targets  # cosinus -> phase
 
+    genome.layers[0].palette.mode = "gradient"
+    genome.layers[0].palette.stops = [[0.0, 0.1, 0.1, 0.1], [1.0, 0.8, 0.8, 0.8]]
+    anim = anim_export.default_spin_animation(genome)
+    targets = {t.target for t in anim.tracks}
+    assert "layers.0.palette.stops" in targets  # gradient -> rotation des arrêts
+
 
 def test_default_spin_renders_on_arbitrary_genome():
     # Le spin par défaut cible background_params.angle même si la clé est absente :

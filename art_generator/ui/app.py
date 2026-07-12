@@ -67,13 +67,6 @@ _RES_KEY_FOR_EDGE = {resolution.PRESETS[k].long_edge: k for k in _RES_KEYS}
 _DEBOUNCE_MS = 300
 _SPINNER_FRAMES = ("⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏")
 
-# Aperçu animé : petite résolution + peu de points pour un rendu **vif** (chaque
-# frame doit coûter une fraction de seconde, sinon la boucle met trop longtemps à
-# démarrer). L'export garde le génome pleine résolution.
-_ANIM_PREVIEW_SIDE = 400
-_ANIM_PREVIEW_FRAMES = 24
-_ANIM_PREVIEW_POINT_CAP = 70_000
-
 
 def _layer_detail(layer: LayerGenome) -> str:
     params = layer.equation_params
@@ -134,6 +127,7 @@ class ArtGeneratorApp(tk.Tk):
         # -- état de l'aperçu animé (lecture d'une boucle dans le canevas) --
         self._anim_q: queue.Queue = queue.Queue()
         self._anim_playing = False
+        self._anim_building = False  # génération des frames en cours (throbber affiché)
         self._anim_frames: list[Image.Image] | None = None
         self._anim_index = 0
         self._anim_total = 0
@@ -884,7 +878,7 @@ class ArtGeneratorApp(tk.Tk):
         )
 
     def _toggle_anim_preview(self) -> None:
-        if self._anim_playing or self._anim_frames is not None:
+        if self._anim_playing or self._anim_building or self._anim_frames is not None:
             self._halt_anim_preview()
             self._schedule_render()  # revient à l'aperçu statique
             return
@@ -893,34 +887,35 @@ class ArtGeneratorApp(tk.Tk):
         if animated.animation is None:
             self._status.configure(text="Animation : cocher au moins un effet.")
             return
-        # Aperçu léger : peu de frames, petite résolution → chaque frame coûte une
-        # fraction de seconde, et la boucle démarre dès les 2 premières frames.
-        n = min(animated.animation.frames, _ANIM_PREVIEW_FRAMES)
+        # Toutes les frames sont rendues à la **résolution de l'aperçu** (identique
+        # à l'aperçu statique : ratio du génome préservé) ; la lecture ne démarre
+        # qu'une fois **toutes** les frames prêtes. Le throbber occupe le canevas
+        # pendant la génération.
+        n = animated.animation.frames
         times = [animation_core.frame_time(animated.animation, i) for i in range(n)]
         self._anim_fps = options.fps
         self._anim_play_btn.configure(text="⏹ Stop")
-        self._status.configure(text=f"Aperçu animé : rendu 0/{n}…")
         if self._render_job is not None:
             self.after_cancel(self._render_job)
             self._render_job = None
-        self._stop_spinner()
-        self._request_id += 1  # invalide tout rendu statique en vol (ne pas écraser)
-
+        self._request_id += 1  # invalide tout rendu statique en vol
         self._anim_gen_id += 1
         gen = self._anim_gen_id
-        self._anim_frames = []
+        self._anim_frames = None
         self._anim_index = 0
         self._anim_total = n
+        self._anim_building = True
+        self._start_spinner(self._request_id)  # throbber pendant la génération
+        self._status.configure(text=f"Génération de l'animation : 0/{n}…")
 
         def work() -> None:
             try:
-                for t in times:
+                frames = []
+                for k, t in enumerate(times, start=1):
                     static = animation_core.evaluate(animated, t)
-                    img = preview.render_preview(
-                        static, max_side=_ANIM_PREVIEW_SIDE, point_cap=_ANIM_PREVIEW_POINT_CAP
-                    )
-                    self._anim_q.put(("frame", gen, img))
-                self._anim_q.put(("done", gen))
+                    frames.append(preview.render_preview(static, point_cap=preview.DRAFT_POINT_CAP))
+                    self._anim_q.put(("progress", gen, k, n))
+                self._anim_q.put(("ready", gen, frames))
             except Exception as exc:  # pragma: no cover - robustesse UI
                 self._anim_q.put(("error", gen, exc))
 
@@ -937,12 +932,14 @@ class ArtGeneratorApp(tk.Tk):
         self._anim_play_job = self.after(delay, self._advance_anim)
 
     def _halt_anim_preview(self) -> None:
-        """Arrête la lecture de l'aperçu animé (sans reprogrammer de rendu)."""
+        """Arrête la lecture/génération de l'aperçu animé (sans reprogrammer de rendu)."""
         self._anim_gen_id += 1  # les frames encore en vol seront ignorées
+        self._stop_spinner()
         if self._anim_play_job is not None:
             self.after_cancel(self._anim_play_job)
             self._anim_play_job = None
         self._anim_playing = False
+        self._anim_building = False
         self._anim_frames = None
         if hasattr(self, "_anim_play_btn"):
             self._anim_play_btn.configure(text="▶ Aperçu")
@@ -985,23 +982,28 @@ class ArtGeneratorApp(tk.Tk):
         try:
             while True:
                 kind, *rest = self._anim_q.get_nowait()
-                if kind == "frame":
-                    gen, img = rest
-                    if gen != self._anim_gen_id or self._anim_frames is None:
-                        continue  # aperçu périmé ou arrêté
-                    self._anim_frames.append(img)
-                    done = len(self._anim_frames)
-                    self._status.configure(text=f"Aperçu animé : rendu {done}/{self._anim_total}…")
-                    if not self._anim_playing and done >= 2:
-                        self._anim_playing = True  # démarre dès 2 frames
-                        self._advance_anim()
-                elif kind == "done":
-                    if rest[0] != self._anim_gen_id:
+                if kind == "progress":
+                    gen, done, total = rest
+                    if gen != self._anim_gen_id:
                         continue
-                    if not self._anim_playing and self._anim_frames:
-                        self._anim_playing = True  # cas < 2 frames
-                        self._advance_anim()
-                    self._status.configure(text="Aperçu animé (boucle). ▶/⏹ pour arrêter.")
+                    self._status.configure(text=f"Génération de l'animation : {done}/{total}…")
+                elif kind == "ready":
+                    gen, frames = rest
+                    if gen != self._anim_gen_id:
+                        continue
+                    self._stop_spinner()
+                    self._anim_building = False
+                    if not frames:
+                        self._halt_anim_preview()
+                        self._schedule_render()
+                        continue
+                    self._anim_frames = frames
+                    self._anim_index = 0
+                    self._anim_playing = True
+                    self._advance_anim()
+                    self._status.configure(
+                        text=f"Aperçu animé ({len(frames)} frames, boucle). ⏹ pour arrêter."
+                    )
                 elif kind == "error":
                     if rest[0] != self._anim_gen_id:
                         continue

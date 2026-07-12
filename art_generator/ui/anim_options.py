@@ -15,6 +15,7 @@ from __future__ import annotations
 import copy
 from dataclasses import dataclass
 
+from ..core.animation import color_cycle_track
 from ..core.genome import AnimationGenome, ArtworkGenome, Keyframe, Track
 
 _TAU = 6.283185307179586
@@ -34,21 +35,6 @@ class AnimationOptions:
     noise_span: float = 3.0         # distance parcourue sur l'axe temporel du bruit
 
 
-def _color_track(index: int, layer) -> Track:
-    """Piste de cyclage couleur adaptée au mode de palette de la couche."""
-    if layer.palette.mode in ("hsv", "hsl"):
-        h0 = float(layer.palette.hue[0])
-        return Track(
-            f"layers.{index}.palette.hue.0",
-            [Keyframe(0.0, h0), Keyframe(1.0, h0 + 1.0)],
-        )
-    phase = list(layer.palette.phase)
-    return Track(
-        f"layers.{index}.palette.phase",
-        [Keyframe(0.0, phase), Keyframe(1.0, [p + 1.0 for p in phase])],
-    )
-
-
 def apply(genome: ArtworkGenome, options: AnimationOptions) -> ArtworkGenome:
     """Renvoie une copie de ``genome`` animée selon ``options``.
 
@@ -65,7 +51,7 @@ def apply(genome: ArtworkGenome, options: AnimationOptions) -> ArtworkGenome:
 
     for i, layer in enumerate(g.layers):
         if options.color_cycle:
-            tracks.append(_color_track(i, layer))
+            tracks.append(color_cycle_track(i, layer))
 
         if options.particle_reveal and layer.equation_family == "particles":
             layer.equation_params = dict(layer.equation_params)
