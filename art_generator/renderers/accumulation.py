@@ -199,6 +199,12 @@ def project_layer(
     if len(points) == 0:
         return empty
 
+    # Source de couleur = longueur d'arc cumulée : calculée sur l'orbite unique,
+    # avant la symétrie (qui réplique les valeurs) pour que chaque copie garde un
+    # dégradé 0→1 propre plutôt qu'un saut entre copies.
+    if layer.color_source == "arc":
+        values = Equation.arc_length_values(points)
+
     # Centrage robuste avant symétrie (rotations/miroirs corrects).
     center = np.median(points, axis=0)
     points = points - center

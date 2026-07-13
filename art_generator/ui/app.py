@@ -41,6 +41,7 @@ _BACKGROUNDS = ["black", "white", "gradient", "radial"]
 _BLEND_MODES = ["normal", "add", "screen", "multiply", "difference"]
 _RENDER_MODELS = ["light", "ink"]
 _COLOR_BY = ["velocity", "t", "radius"]
+_COLOR_SOURCES = ["sample", "arc"]
 _FRAMINGS = ["box", "density"]
 _SYMMETRIES = ["none", "mirror", "radial", "kaleidoscope"]
 _NOISE_TYPES = ["none", "perlin", "simplex", "fbm", "worley"]
@@ -403,6 +404,7 @@ class ArtGeneratorApp(tk.Tk):
         self._blend_var = self._labelled_combo(panel, "Fusion", _BLEND_MODES, lambda v: self._set_layer("blend_mode", v), register=True)
         self._model_var = self._labelled_combo(panel, "Médium", _RENDER_MODELS, lambda v: self._set_layer("render_model", v), register=True)
         self._colorby_var = self._labelled_combo(panel, "Couleur par", _COLOR_BY, lambda v: self._set_layer("color_by", v), register=True)
+        self._colorsrc_var = self._labelled_combo(panel, "Source couleur", _COLOR_SOURCES, lambda v: self._set_layer("color_source", v), register=True)
         self._framing_var = self._labelled_combo(panel, "Cadrage", _FRAMINGS, lambda v: self._set_layer("framing", v), register=True)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
@@ -520,6 +522,7 @@ class ArtGeneratorApp(tk.Tk):
         self._blend_var.set(layer.blend_mode)
         self._model_var.set(layer.render_model)
         self._colorby_var.set(layer.color_by)
+        self._colorsrc_var.set(layer.color_source)
         self._framing_var.set(layer.framing)
         self._opacity_var.set(layer.opacity)
         self._glow_var.set(layer.glow)

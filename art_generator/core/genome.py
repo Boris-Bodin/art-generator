@@ -55,6 +55,10 @@ class LayerGenome:
 
     palette: PaletteGenome = field(default_factory=PaletteGenome)
     color_by: str = "velocity"  # 'velocity' | 't' | 'radius'
+    # Source de la valeur de coloration passée à la palette :
+    # 'sample' : les ``values`` retournées par l'équation (défaut, historique) ;
+    # 'arc'    : la longueur d'arc cumulée le long de la trajectoire (dégradé 0→1).
+    color_source: str = "sample"  # sample | arc
 
     blend_mode: str = "add"  # normal | add | screen | multiply | difference
     opacity: float = 1.0
