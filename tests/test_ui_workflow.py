@@ -219,6 +219,34 @@ def test_list_user_presets_empty_when_missing(tmp_path):
     assert library.list_user_presets(tmp_path / "nope") == []
 
 
+# --- Sauvegarde automatique -------------------------------------------------
+
+def test_autosave_round_trip_is_pixel_identical(tmp_path, monkeypatch):
+    # autosave_path() dérive de default_dir().parent : on détourne default_dir
+    # pour écrire dans un dossier temporaire plutôt que dans ~.
+    monkeypatch.setattr(library, "default_dir", lambda: tmp_path / "presets")
+    genome = navigation.mutate(ag.generate(15), seed=4)
+    path = library.save_autosave(genome)
+    assert path == library.autosave_path()
+    restored = library.load_autosave()
+    assert restored is not None
+    original_px = np.asarray(preview.render_preview(genome, max_side=160))
+    restored_px = np.asarray(preview.render_preview(restored, max_side=160))
+    assert np.array_equal(original_px, restored_px)
+
+
+def test_load_autosave_none_when_absent(tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "default_dir", lambda: tmp_path / "presets")
+    assert library.load_autosave() is None
+
+
+def test_load_autosave_none_when_corrupt(tmp_path, monkeypatch):
+    monkeypatch.setattr(library, "default_dir", lambda: tmp_path / "presets")
+    library.autosave_path().parent.mkdir(parents=True, exist_ok=True)
+    library.autosave_path().write_text("{ pas du json", "utf-8")
+    assert library.load_autosave() is None
+
+
 def test_layer_label_includes_family_variant_and_symmetry():
     layer = ag.LayerGenome(
         equation_family="attractor",

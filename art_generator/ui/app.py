@@ -110,9 +110,17 @@ class ArtGeneratorApp(tk.Tk):
         self.geometry("1180x720")
         self.minsize(1000, 640)
 
-        seed = seed if seed is not None else random.randint(0, 2**31 - 1)
-        self.genome: ArtworkGenome = generate(seed)
-        self._nav_seed = seed  # sert de graine évolutive pour la navigation
+        # Seed explicite (CLI) → on l'honore. Sinon on tente de restaurer la
+        # sauvegarde automatique du dernier état de l'éditeur ; à défaut, seed
+        # aléatoire.
+        restored = library.load_autosave() if seed is None else None
+        if restored is not None:
+            self.genome: ArtworkGenome = restored
+            self._nav_seed = restored.seed  # sert de graine évolutive pour la navigation
+        else:
+            seed = seed if seed is not None else random.randint(0, 2**31 - 1)
+            self.genome = generate(seed)
+            self._nav_seed = seed
         self._current_layer = 0
         self._dirty = False
 
@@ -1045,6 +1053,13 @@ class ArtGeneratorApp(tk.Tk):
         self._photo = None
 
         def work() -> None:
+            # Sauvegarde automatique de l'état rendu : préserve le travail en cours
+            # même si l'app se ferme avant tout enregistrement manuel. Best-effort,
+            # ne doit jamais faire échouer le rendu.
+            try:
+                library.save_autosave(snapshot)
+            except Exception:  # pragma: no cover - robustesse disque
+                pass
             start = time.perf_counter()
             try:
                 img = preview.render_preview(snapshot, point_cap=preview.DRAFT_POINT_CAP)

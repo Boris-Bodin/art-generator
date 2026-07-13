@@ -203,3 +203,37 @@ def list_user_presets(directory: str | Path | None = None) -> list[Path]:
 def load_user_preset(path: str | Path) -> ArtworkGenome:
     """Charge un preset utilisateur depuis son fichier JSON."""
     return genome_io.load(path)
+
+
+# --- Sauvegarde automatique de l'éditeur ------------------------------------
+
+
+def autosave_path() -> Path:
+    """Chemin de la sauvegarde automatique du dernier état de l'éditeur.
+
+    Un unique fichier (``~/.art_generator/autosave.json``) réécrit à chaque rendu,
+    pour restaurer le travail en cours au prochain lancement même sans preset
+    explicitement enregistré.
+    """
+    return default_dir().parent / "autosave.json"
+
+
+def save_autosave(genome: ArtworkGenome) -> Path:
+    """Écrit l'état courant de l'éditeur dans la sauvegarde automatique."""
+    return genome_io.save(genome, autosave_path())
+
+
+def load_autosave() -> ArtworkGenome | None:
+    """Recharge la dernière sauvegarde automatique.
+
+    Renvoie ``None`` si aucune sauvegarde n'existe ou si elle est illisible
+    (fichier corrompu, format obsolète) — l'appelant repart alors d'une œuvre
+    neuve sans planter.
+    """
+    path = autosave_path()
+    if not path.exists():
+        return None
+    try:
+        return genome_io.load(path)
+    except Exception:  # pragma: no cover - dépend d'un fichier corrompu sur disque
+        return None
