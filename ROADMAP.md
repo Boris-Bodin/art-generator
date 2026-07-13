@@ -1,322 +1,71 @@
 # Feuille de route
 
-La Phase 1 pose des fondations propres et un moteur qui produit déjà des œuvres.
-Les phases suivantes enrichissent le langage artistique sans casser l'interface
-(génome sérialisable, registre d'équations, modèle « nuage de points »).
+Le MVP, la V1 et la Phase 1 de la V2 (animation) sont **livrés** : moteur
+reproductible, familles d'équations, particules, compositing, export
+PNG/TIFF/SVG/PDF, résolutions HD→16K, UI desktop, Web App et animation.
+Ce document ne conserve que les **chantiers ouverts** et les **pistes** pour la
+suite. L'historique détaillé des phases livrées est dans l'historique Git.
 
-## MVP
+Tout enrichissement doit préserver les invariants du moteur (voir `CLAUDE.md`) :
+génome sérialisable, une seed → un génome → des pixels identiques, round-trip
+JSON, modèle « nuage de points » et registre comme seul point d'extension.
 
+## Chantiers ouverts
 
+### Performance — Accélération GPU (reportée)
 
-### Phase 1 — Fondations ✅ (livré)
+La cible naturelle est la boucle **chaotique** des attracteurs et l'advection des
+particules (`equations/particles.py`), aujourd'hui des boucles Python (correctes
+mais bornées à quelques centaines de milliers de points par couche). Blocage :
+un écart d'1 ULP (`sin`/`cos` Numba ≠ NumPy) diverge totalement sur les systèmes
+chaotiques, et la Web tourne en Python pur (Pyodide, pas de Numba) → même seed ⇒
+image différente desktop vs Web. **Incompatible avec l'invariant « même rendu »**
+tant qu'un chemin bit-exact partagé n'est pas trouvé. `Equation.sample` est
+conçue pour ne pas changer lors de ce portage.
 
-- [x] `ArtworkGenome` sérialisable (JSON), reproductible au pixel près
-- [x] RNG déterministe (PCG64)
-- [x] Familles : courbes paramétriques, polaires, attracteurs (Clifford, de Jong, custom)
-- [x] Générateur d'équations avec contrôle de viabilité (rejet des formes dégénérées)
-- [x] Palettes procédurales (gradient cosinus)
-- [x] Renderer par accumulation lumineuse (HDR, glow, compression tonale)
-- [x] Symétries : miroir, radiale, kaléidoscope
-- [x] Couches multiples + modes de fusion (normal, add, screen, multiply, difference)
-- [x] Fonds : noir, blanc, dégradé
-- [x] Export PNG/TIFF, CLI, planche-contact
-- [x] Suite de tests (déterminisme, round-trip, viabilité)
+### Viabilité affinée (dette)
 
-### Phase 2 — Richesse du langage ✅ (livré)
+Le contrôle de viabilité (`generators/quality.py`) peut encore laisser passer des
+formes **quasi-1D** ; un critère de « surface minimale » plus fin que la dimension
+de box-counting actuelle est envisageable.
 
-- [x] **Bruit** (`noise/fields.py`) : Perlin, fBm (somme fractale), Worley,
-      appliqué en déformation du domaine (warp) et en modulation des couleurs
-      via les champs `noise_type`/`warp`/`warp_freq`/`color_noise` de la couche
-- [x] **Champs de vecteurs** (`equations/vector_field.py`) : `dx/dt = f(x,y)`,
-      `dy/dt = g(x,y)` avec advection de particules le long des lignes de courant
-- [x] **Domaines complexes** (`equations/complex_map.py`) : transformations
-      conformes `w = f(z)` itérées (poly / sinus / rationnelle de type Möbius)
-- [x] **Fractales** (`equations/fractal.py`) : Mandelbrot & Julia rendus en
-      **Buddhabrot** (accumulation d'orbites) pour rester dans le modèle nuage de
-      points ; famille parmi d'autres, non centrale
-- [x] Palettes **HSV** et **dégradés multi-arrêts** (`palettes/procedural.py`)
+### Animation — compléments
 
-### Phase 2+ — Compléments ✅ (livré)
+- **Taille/opacité par particule au fil de la vie** : nécessiterait d'étendre le
+  contrat `sample(n) -> (points, values)` par un canal de poids.
+- **Éditeur de timeline par image-clé** : l'UI propose des effets prédéfinis, pas
+  l'édition de pistes arbitraires (`Track`/`Keyframe` existent déjà côté moteur).
 
-- [x] Bruit **Simplex** 2D véritable (`noise/fields.py::simplex2d`), grille de
-      triangles sans artefacts directionnels
-- [x] Bruit modulant aussi **la lumière** (poids lumineux par point) et
-      **l'épaisseur** (rayon de trait par point) — champs `light_noise` et
-      `thickness_noise` de la couche, appliqués dans l'accumulation
-- [x] Palettes **HSL** (`palettes/procedural.py::hsl_palette`)
-- [x] **Contraintes d'harmonie** (`harmonic_palette`) : schémas de la roue
-      chromatique (monochrome, analogue, complémentaire, split-complémentaire,
-      triadique, tétradique) — harmonie garantie par construction
-- [x] **Palettes nommées** (`NAMED_PALETTES` : nebula, ember, aurora, bio,
-      ocean, sunset) pour une direction artistique reconnaissable
+## Amélioration
 
-  Reste ouvert : bruit 3D pour l'animation temporelle (Phase 4).
+### Phase 1 Langage artistique
 
-### Phase 3 — Système de particules ✅ (livré)
+- **Nouvelles familles d'équations** (via le registre, sans toucher au moteur) :
+  L-systèmes / courbes de remplissage (Hilbert, Peano), diagrammes de Voronoi
+  stipplés, agrégation par diffusion limitée (DLA), automates cellulaires
+  continus (Lenia), champs de réaction-diffusion (Gray-Scott).
+- **Dégradés le long de la trajectoire** : mapper la couleur sur la longueur d'arc
+  cumulée plutôt que sur `values`, pour des rubans à progression chromatique.
+- **Textures de trait** : noyau d'accumulation non circulaire (anisotrope, orienté
+  par le champ de vitesse) pour un rendu « coup de pinceau ».
 
-- [x] **Particules** (`equations/particles.py`) avec position, vitesse, durée de
-      vie et âge ; simulation pas à pas (intégration d'Euler) enregistrant la
-      position de chaque particule à chaque pas → reste dans le modèle unifié
-      « nuage de points », donc rendue par le renderer existant sans modification.
-      La couleur (âge le long de la trajectoire ou vitesse), l'épaisseur et
-      l'opacité proviennent des champs de couche déjà en place (`color_*`,
-      `thickness*`, `opacity`).
-- [x] **Passage à l'échelle** : le nombre de points demandé pilote le nombre de
-      pas (`steps = n // n_particles`) — quelques milliers de particules
-      simultanées suffisent à atteindre le million de points.
-- [x] **Émetteurs** (point, disque, anneau, ligne), **forces** (gravité,
-      attraction/répulsion centrale, tourbillon, traînée) et **turbulence** par
-      bruit *curl* (sans divergence) — tout piloté par le génome ; renaissance
-      des particules mortes à l'émetteur pour un flux continu.
+### Phase 2 Direction artistique & découverte
 
-  Reste ouvert : advection GPU (voir dette technique) et taille/opacité par
-  particule variables dans le temps (Phase 4, animation).
+- **Recherche par similarité / exploration guidée** : vecteur d'empreinte visuelle
+  (histogramme de couleurs + occupation) par génome, pour naviguer vers des
+  voisins « qui ressemblent » plutôt que par mutation aveugle.
+- **Curation par lot** : noter une planche-contact et rejouer les seeds retenues
+  comme presets nommés.
+- **Import de palette depuis une image** : extraire une palette harmonique d'une
+  photo de référence et l'injecter dans le génome.
 
-### Phase 4 — Composition & fonds ✅ (livré)
+### Phase 4 Export & Interface
 
-Le rendu était un « light painting » **additif** : chaque couche valait noir là
-où il n'y avait pas de forme, rendant le fond noir quasi obligatoire. Cette phase
-**découple la forme du fond** (compositing par alpha) et élargit fonds et cadrage,
-sans casser les invariants (seed→pixels identiques, round-trip JSON — le rendu
-sur fond noir reste identique au pixel près). Tout nouveau paramètre passe par le
-génome et est tiré par `generators/genome_generator.py`.
-
-- [x] **4a — Compositing par alpha** : `render_layer` renvoie désormais
-      `(color, alpha)`, la couverture `alpha` étant dérivée de la densité
-      (`renderers/accumulation.py::_resolve`) ; l'engine compose via
-      `core/blend.py::composite`, de sorte que les zones vides (`alpha = 0`)
-      laissent transparaître le fond quel qu'il soit (fin du fond noir implicite).
-      La couleur non prémultipliée garantit que `color·alpha` reproduit l'ancien
-      tampon additif → fond noir inchangé.
-- [x] **4b — Mode « encre sur papier » (soustractif)** : modèle de rendu `ink`
-      (champ `LayerGenome.render_model`) où le pigment *absorbe* la lumière du
-      support (`out = base·(1 - a·(1 - color))`) au lieu d'en ajouter ; les
-      couches s'assombrissent en s'empilant, rendant des formes sombres lisibles
-      sur papier clair. Le générateur produit ~25 % d'œuvres à l'encre, avec
-      palettes de pigments sombres et fonds « papier ».
-- [x] **4c — Fonds enrichis** (`core/background.py`) : dégradés **directionnels**
-      (paramètre `angle`) et **radiaux** (`radial`), plus **vignette**
-      optionnelle applicable à tout fond ; au-delà des `black`/`white`/`gradient`.
-- [x] **4d — Cadrage par densité** (`utils/math_utils.py::fit_to_canvas`,
-      paramètre `center_on`) : le mode `density` centre sur le **centroïde
-      pondéré par la densité** et met à l'échelle sur un **rayon robuste**, pour
-      cadrer sur le cœur de la forme (champ `LayerGenome.framing`).
-
-### Phase 5 — Export ✅ (livré)
-
-Cette phase élargit les débouchés du moteur sans toucher aux invariants : le
-rendu par tuiles est **identique au pixel près** au chemin simple (testé), et
-l'export vectoriel réutilise le même nuage de points projeté.
-
-- [x] **Export vectoriel SVG/PDF** (`exporters/vector.py`) « par tracés » : chaque
-      point du nuage projeté devient un disque coloré (stipple). Un *light
-      painting* additif d'un million de points ne se transpose pas fidèlement en
-      géométrie — l'export vectoriel est donc une **esthétique distincte**,
-      redimensionnable à l'infini. Réalisé via **matplotlib** (déjà une
-      dépendance) : un même code produit SVG *et* PDF, sans binaire natif (à la
-      place de CairoSVG, fragile à installer). Sous-échantillonnage déterministe
-      (plafond de points par couche) pour borner la taille du fichier.
-- [x] **Résolutions HD/4K/8K/16K, ratio & DPI configurables** (`exporters/
-      resolution.py`, options CLI `--preset`/`--ratio`/`--size`/`--dpi`) : le
-      grand côté suit le préréglage, le rapport d'aspect façonne les deux
-      dimensions. Un préréglage peut porter son **propre ratio** (format
-      d'impression *displate* → 4000×5600) ; un `--ratio` explicite prime.
-- [x] **Rendu indépendant de la résolution** (`core/engine.py::_scale`) : le
-      nombre de points étant fixé dans le génome, monter en résolution diluait la
-      densité par pixel et **faisait apparaître plus de fond**. Le rendu met
-      désormais le nombre de points à l'échelle de l'**aire** (référence 1600 px,
-      planché à 1×) pour garder une densité constante. Comme une aire 2D et un
-      réseau de lignes 1D ne se comportent pas pareil, l'épaisseur et le glow ne
-      sont mis à l'échelle **que pour les familles filamentaires** (vector_field,
-      parametric, polar, complex — `accumulation._stroke_scale`), afin de
-      préserver la densité du voile de lignes ; le poids est alors **normalisé
-      par l'aire du disque** (`accumulation._point_modulation`) pour que le trait
-      s'*élargisse sans s'alourdir* (densité visuelle constante). Les familles
-      nuage (attractor, particles, fractal) gardent des traits fins et nets. Le **support 1D pur**
-      (vector_field) fait croître ses points linéairement plutôt qu'avec l'aire
-      (`accumulation._point_factor`). Enfin, les familles à **trajectoires
-      intégrées** (vector_field, particles) préservent leur **durée intégrée**
-      (`steps × dt`) en réduisant `dt` d'autant (`core/engine.py::_build_equation`)
-      : sans cela, monter en résolution rallongerait les trajectoires et
-      **changerait la forme** au lieu d'affiner l'échantillonnage. La borne de
-      points du Buddhabrot (`equations/fractal.py`) a été relevée pour suivre
-      l'aire. À 1600 px ou en deçà, le rendu est **inchangé au pixel près**.
-- [x] **Rendu par tuiles** (`core/engine.py::_render_tiled`) : au-delà de 4096 px
-      (ou sur `--tile`), l'image est composée **bande par bande** pour borner la
-      mémoire (un tampon HDR 16K en float64 pèse plusieurs Go par couche). Chaque
-      couche est projetée une fois (`renderers/accumulation.py::project_layer`),
-      une pré-passe fige le percentile de normalisation **global** (`global_hi`)
-      et les bandes sont élargies d'un halo pour un glow continu aux coutures —
-      d'où l'identité pixel-à-pixel avec le chemin simple. Le fond est lui aussi
-      calculé par bandes (`core/background.py`).
-
-## V1
-
-### Phase 1 — Interface & navigation ✅ (livré)
-
-Cette phase donne un **atelier interactif** au moteur sans toucher aux invariants :
-la logique (aperçu, navigation, presets) vit dans des modules **sans toolkit**,
-donc testables sans écran ; la *vue* Tkinter ne fait que les câbler. Choix de
-Tkinter (bibliothèque standard) pour rester fidèle au socle minimal du projet
-(matplotlib/numpy/pillow) — **aucune dépendance nouvelle**.
-
-- [x] **Interface graphique** (`ui/app.py`, commande `art-generator ui`) : trois
-      colonnes — réglages globaux (seed, presets, fichier, fond) · aperçu · éditeur
-      de couche. Édition en direct de tous les champs du génome (famille d'équation,
-      fusion, médium light/ink, opacité, glow, exposition, épaisseur, symétrie,
-      bruit, palette), changement de seed (précédent/suivant/aléatoire), et
-      **sauvegarde/chargement** (JSON de génome, export image pleine résolution).
-- [x] **Aperçu « temps réel »** (`ui/preview.py`, logique pure) : profite de
-      l'indépendance à la résolution (rendu **fidèle** à petite taille, ≈ 560 px,
-      cf. Phase 5) ; rendu **débouncé** et **hors thread principal** (Tk n'est pas
-      thread-safe : résultat renvoyé par une file, sondée par `after`, stratégie
-      « le dernier gagne »). Mode **brouillon** (`point_cap`) plafonnant les points
-      pour un retour plus vif pendant l'édition ; l'export final garde le génome
-      complet.
-- [x] **Bibliothèque de presets** (`presets/library.py`) : catalogue **intégré**
-      de seeds curées et nommées (une seed suffit — une œuvre = un génome) + presets
-      **utilisateur** (génomes arbitraires édités à la main, enregistrés en JSON).
-- [x] **Navigation dans l'espace des génomes** (`generators/navigation.py`) :
-      `mutate` — un *petit pas* déterministe vers un voisin (perturbation douce des
-      champs visuels, la **forme** `equation_params` restant intacte → viabilité
-      préservée, jamais d'image noire) ; `reroll_equations` — un *saut* re-tirant
-      des formes **viables** en gardant la mise en scène.
-
-  Reste ouvert : rendu réellement temps réel (GPU, Phase 7) pour les familles
-  coûteuses (attracteurs, particules).
-
-### Phase 2 — UX
-
-- [x] **Bibliothèque de presets** (`presets/library.py`) : replace the _BUILTIN seed 
-      by the reading of the *.json file
-- [x] **Desktop UI** : Indique if changement has been made on the seed
-- [x] **Desktop UI** : You can select the famille d'une couche mais pas modifier les parametre
-- [x] **Desktop UI** : add throbber in place of artwork when rendering  
-- [x] **Desktop UI** : in the couche list Give better namming to better selection experience  
-- [x] **Background** : I always see blacky gradient/radial, add more colorful background
-
-### Phase 3 — Performance
-
-- [x] **Vectorisation poussée** (bit-exact, pur NumPy → profite aussi au Web) :
-      accumulation par `np.bincount` au lieu de `np.ufunc.at` (parcours préservé,
-      chemin simple == rendu par tuiles au pixel près) et bruit de Perlin mémoïsé
-      par seed + indexation directe du gradient. Gains : ~−24 % particules,
-      ~−13 % attracteurs.
-- [x] **Multiprocessing de la planche-contact** (`examples/generate_gallery.py`) :
-      chaque tuile ne dépend que de sa seed → rendu *embarrassingly parallel* sur
-      un `ProcessPoolExecutor` (ordre préservé, option `--jobs`), avec fallback
-      séquentiel (une seule tuile ou `--jobs 1`). Résultat identique au pixel près
-      quel que soit le nombre de workers (testé). Gain mesuré : **×3,3** sur
-      12 cœurs (bridé par le straggler « particules » et le démarrage des workers).
-      Reste ouvert : le multiprocessing d'un **rendu simple** (peu rentable, et
-      indisponible en WASM → la Web garde le chemin séquentiel).
-- [ ] **Accélération GPU (Numba/CUDA) — reportée.** La cible naturelle
-      est la boucle **chaotique** des attracteurs : un écart d'1 ULP (`sin`/`cos`
-      Numba ≠ NumPy) diverge totalement, et la Web tourne en Python pur (Pyodide,
-      pas de Numba) → même seed ⇒ image différente desktop vs Web. Incompatible
-      avec l'invariant « même rendu ».
-- [x] **Viabilité affinée** (`generators/quality.py`) : ajoute un critère de
-      **dimension de box-counting** (pente log-log de l'occupation à plusieurs
-      résolutions de grille, ≈ 1 pour une courbe, ≈ 2 pour un remplissage) au
-      plancher d'occupation existant. L'occupation seule laissait passer des formes
-      **quasi-1D** (courbe fine, cercle) qui remplissent beaucoup de cellules tout
-      en restant unidimensionnelles ; le plancher `D ≥ 0,8` (dans le creux empirique
-      séparant les dégénérescences, D ≲ 0,65, des courbes légitimes, D ≳ 1,0) les
-      rejette sans écarter les familles filamentaires (rosaces, courbes, champs).
-      **Note :** durcir la viabilité décale le flux RNG des re-tirages → l'art
-      dérivé d'une **seed** change (galerie incluse) ; les **presets** (génomes JSON)
-      sont intacts, et les invariants de rendu (round-trip, tuiles == simple) tiennent.
-
-### Phase 4 - Stabilization ✅ (livré)
-
-- [x] **Desktop UI** : formulaire typé pour les paramètres d'équation (case à
-  cocher, listes de choix par famille, saisies validées, dicts imbriqués aplatis
-  en chemins pointés) au lieu de l'éditeur JSON. Logique pure dans
-  `ui/param_form.py`, testée hors toolkit.
-- [x] **Fractales sans symétrie** : le Buddhabrot dégénérait en disque de bruit
-  (carré des positions initiales + cercle du rayon d'échappement). Corrigé en ne
-  retenant que les orbites qui séjournent (`min_escape`) et en sautant leurs
-  premiers points (`min_depth`).
-- [x] **Seed depuis un JSON** : au chargement d'un JSON ou d'un preset, la seed de
-  navigation (`_nav_seed`) repart de `genome.seed` (mutation/pas-à-pas cohérents).
-- [x] **Preset dans le package** : `library.builtin_dir()` + `save_builtin_preset()`
-  écrivent dans `art_generator/presets/` (versionné, exposé sur la Web UI) ;
-  l'UI propose la destination (package vs perso).
-- [x] **Desktop UI** : section Format — choix résolution (grand côté) et ratio
-  d'aspect, appliqués au génome donc à l'export.
-- [x] **Desktop UI** : pan & zoom sur l'aperçu (molette centrée curseur, glisser,
-  double-clic pour réajuster ; seule la portion visible est redimensionnée).
-- [x] **Web App** : vue mobile améliorée (< 720 px : page défilante, œuvre avant
-  les contrôles, cibles tactiles, `prefers-reduced-motion`).
-- [x] **Web UI** : tests pytest (`tests/test_web.py`) validant `public/engine.py`
-  et la cohérence presets/version, en amont du build.
-
-## V2
-
-### Phase 1 — Animation ✅ (livré)
-
-L'animation vit **au-dessus** du moteur, sous forme d'une fonction pure —
-`frame(t) = Engine.render(evaluate(genome, t))` — sans le modifier : tiling,
-indépendance à la résolution et déterminisme sont hérités tels quels. Invariant
-ajouté : `genome.animation is None` ⇒ `evaluate` est l'identité ⇒ rendu
-**identique au pixel près** à l'œuvre statique (aucune régression). La `seed` et
-les `equation_params['seed']` restent fixes sur toutes les frames : la structure
-ne « saute » pas, seuls les champs ciblés par une piste évoluent.
-
-- [x] **Keyframes** (`core/genome.py::Keyframe/Track/AnimationGenome`,
-      `core/animation.py`) : une `Track` fait varier **un champ du génome** adressé
-      par un **chemin pointé** (ex. `layers.0.symmetry_order`,
-      `background_params.angle`, `layers.0.palette.phase.1`) — le résolveur
-      traverse indifféremment dataclasses, dicts, listes et tuples (tuples
-      immuables reconstruits). Interpolation `step`/`linear`/`smooth`, recalage
-      sur le **type courant** du champ (`int`/`tuple` préservés). Ainsi paramètres,
-      couleurs (phase de palette), fond et **équations** (`equation_params`)
-      s'animent sans que le moteur connaisse le temps. ⚠️ Animer un paramètre de
-      *forme* d'une famille chaotique (attracteur) morphe l'image mais peut
-      scintiller (1 ULP → divergence) : préférer symétrie, palette, warp, fond,
-      opacité, `noise_z`, `reveal`.
-- [x] **Bruit 3D** (`noise/fields.py::perlin3d/simplex3d/fbm3d/worley3d`,
-      `sample3d`) : la 3e coordonnée sert d'axe temporel, pour une animation
-      **cohérente** des champs de bruit (déformation continue plutôt que
-      scintillement d'un re-seed par frame). Piloté par le drapeau
-      `LayerGenome.noise_3d` (défaut `False` ⇒ bruit 2D historique, `noise_z`
-      ignoré, rendus inchangés au pixel près) ; une piste anime `noise_z`.
-- [x] **Particules variables dans le temps** (`equations/particles.py`) :
-      paramètres `reveal` (∈[0,1]) et `trail` — une **fenêtre de largeur
-      constante** (`trail·steps`) glisse le long de la trajectoire avec `reveal`,
-      donnant des particules qui **avancent** avec une queue de comète. La
-      simulation tourne sur tous les pas (mouvement cohérent) ; largeur constante
-      ⇒ densité et cadrage stables d'une frame à l'autre. `reveal is None`
-      (défaut) ⇒ trajectoire complète, comportement historique préservé.
-- [x] **Export temporel** (`exporters/animation.py`, commande `art-generator
-      anim`) : chaque frame ne dépendant que de `(genome, t)`, le rendu est
-      *embarrassingly parallel* (`ProcessPoolExecutor`, ordre préservé, option
-      `--jobs`, fallback séquentiel), comme la planche-contact. **GIF** et
-      **séquence PNG** via Pillow (**aucune dépendance nouvelle**) ; **MP4** via
-      `imageio`/`imageio-ffmpeg` (import paresseux, dépendance **optionnelle**).
-      Une animation « spin » par défaut s'applique aux génomes sans piste.
-
-- [x] **Animation dans l'UI** (`ui/anim_options.py` — logique pure testable,
-      câblée dans `ui/app.py`) : section « Animation » avec effets cochables
-      (cycle de couleur, rotation du fond, particules en comète via `reveal`,
-      flux de bruit via `noise_z`/`noise_3d`), **aperçu animé** joué en boucle
-      dans le canevas (frames brouillon rendues hors thread) et **export**
-      GIF/MP4/séquence PNG hors thread avec progression. `anim_options.apply`
-      renvoie une copie animée sans muter le génome ; l'export réutilise
-      `exporters/animation.py` (callback `progress`).
-
-  Reste ouvert : **taille/opacité par particule au fil de la vie** (nécessiterait
-  d'étendre le contrat `sample(n)->(points, values)` par un canal de poids) ; un
-  **éditeur de timeline par image-clé** (l'UI actuelle propose des effets
-  prédéfinis, pas l'édition de pistes arbitraires) ; l'export animé côté **Web**
-  (Pyodide : GIF lourd, MP4 indisponible en WASM).
-
-## Dette technique connue
-
-- [ ] L'itération des attracteurs **et l'advection des particules** (`equations/
-  particles.py`) sont des boucles Python sur les pas (correctes mais limitées à
-  quelques centaines de milliers de points par couche) — candidates n°1 au GPU.
-  L'interface `Equation.sample` est conçue pour ne pas changer lors de ce portage.
-- [ ] Le contrôle de viabilité peut laisser passer des formes quasi 1D ; un critère
-  de « surface minimale » plus fin est envisageable. À traiter en Phase 7
-  (viabilité affinée).
+- **Historique & comparaison A/B** dans l'UI desktop (annuler/refaire sur le
+  génome, vue côte à côte de deux seeds).
+- **Galerie interactive** dans la Web App (grille de seeds curées, deep-link vers
+  un génome).
+- **Tuiles sans couture (seamless / wallpaper)** : domaine torique pour les
+  familles à base de bruit, afin de produire des motifs répétables.
+- **Sortie multi-format en un passage** (PNG + SVG + génome JSON + vignette) pour
+  publication.
