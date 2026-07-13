@@ -44,10 +44,13 @@ de box-counting actuelle est envisageable.
   L-systèmes / courbes de remplissage (Hilbert, Peano), diagrammes de Voronoi
   stipplés, agrégation par diffusion limitée (DLA), automates cellulaires
   continus (Lenia), champs de réaction-diffusion (Gray-Scott).
-- **Dégradés le long de la trajectoire** : mapper la couleur sur la longueur d'arc
-  cumulée plutôt que sur `values`, pour des rubans à progression chromatique.
 - **Textures de trait** : noyau d'accumulation non circulaire (anisotrope, orienté
   par le champ de vitesse) pour un rendu « coup de pinceau ».
+
+> **Livré** — *Dégradés le long de la trajectoire* : source de couleur `arc`
+> (`LayerGenome.color_source`) mappant la longueur d'arc cumulée plutôt que
+> `values`, pour des rubans à progression chromatique. Opt-in, familles à orbite
+> unique (attractor, parametric, polar, complex).
 
 ### Phase 2 Direction artistique & découverte
 
