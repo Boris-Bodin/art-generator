@@ -25,7 +25,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
-from PIL import Image, ImageTk
+from PIL import Image, ImageDraw, ImageTk
 
 from ..core.genome import ArtworkGenome, LayerGenome
 from ..equations import registry
@@ -145,6 +145,12 @@ class ArtGeneratorApp(tk.Tk):
         self._anim_fps = 24
         self._anim_exporting = False
 
+        # -- mode comparaison (figer un aperçu de référence et le confronter au courant) --
+        self._compare_ref: Image.Image | None = None  # aperçu figé (« ancien »)
+        self._compare_genome: ArtworkGenome | None = None  # génome ayant produit l'aperçu figé
+        self._compare_layer = 0                        # couche sélectionnée au moment du figeage
+        self._compare_split = 0.5                      # position du volet (0=tout neuf, 1=tout ancien)
+
         # -- état pan & zoom de l'aperçu --
         self._preview_image = None          # dernière image d'aperçu (PIL)
         self._view_zoom = 1.0               # 1.0 = ajusté au canevas
@@ -169,20 +175,41 @@ class ArtGeneratorApp(tk.Tk):
         self._build_right_panel()
 
     def _labelled_scale(self, parent, label, lo, hi, command, register=False):
-        """Ligne étiquette + curseur ; renvoie la ``DoubleVar`` liée.
+        """Ligne étiquette + curseur + saisie numérique ; renvoie la ``DoubleVar`` liée.
 
-        ``register`` inscrit le curseur dans :attr:`_editor_widgets` afin qu'il
-        soit désactivé quand l'œuvre ne contient aucune couche.
+        La saisie reflète la valeur du curseur et permet aussi de la fixer
+        précisément (bornée à ``[lo, hi]``). ``register`` inscrit les widgets dans
+        :attr:`_editor_widgets` afin qu'ils soient désactivés quand l'œuvre ne
+        contient aucune couche. Un intervalle entier (``lo``/``hi`` entiers) est
+        affiché sans décimale.
         """
+        fmt = "{:.0f}".format if isinstance(lo, int) and isinstance(hi, int) else "{:.2f}".format
         row = ttk.Frame(parent)
         row.pack(fill="x", pady=2)
         ttk.Label(row, text=label, width=12).pack(side="left")
         var = tk.DoubleVar()
+        value_var = tk.StringVar()
+        entry = ttk.Entry(row, textvariable=value_var, width=6, justify="right")
+        entry.pack(side="right", padx=(4, 0))
         scale = ttk.Scale(row, from_=lo, to=hi, variable=var,
                           command=lambda _v: command(var.get()))
         scale.pack(side="left", fill="x", expand=True)
+        var.trace_add("write", lambda *_: value_var.set(fmt(var.get())))
+
+        def _commit_entry(_e=None) -> None:
+            try:
+                v = float(value_var.get().replace(",", "."))
+            except ValueError:
+                value_var.set(fmt(var.get()))  # saisie invalide : on restaure l'affichage
+                return
+            v = max(lo, min(hi, v))
+            var.set(v)      # déplace le curseur (déclenche le trace d'affichage)
+            command(v)
+        entry.bind("<Return>", _commit_entry)
+        entry.bind("<FocusOut>", _commit_entry)
+
         if register:
-            self._editor_widgets.append(scale)
+            self._editor_widgets.extend((scale, entry))
         return var
 
     def _labelled_combo(self, parent, label, values, command, register=False):
@@ -320,7 +347,15 @@ class ArtGeneratorApp(tk.Tk):
         ttk.Button(panel, text="Enregistrer JSON…", command=self._save_json).pack(fill="x", pady=2)
         ttk.Button(panel, text="Exporter l'image…", command=self._export_image).pack(fill="x", pady=2)
 
-        ttk.Separator(panel).pack(fill="x", pady=6)
+        self._build_animation_section(panel)
+        self._bind_wheel(panel, self._left_canvas)
+
+    def _build_render_section(self, panel) -> None:
+        """Réglages qui influencent tout le rendu (format, fond), hors couche.
+
+        Placés en haut du panneau droit : ils s'appliquent à l'œuvre entière,
+        pas à la couche sélectionnée.
+        """
         ttk.Label(panel, text="Format", font=("", 10, "bold")).pack(anchor="w")
         self._resolution_var, self._resolution_combo = self._format_combo(
             panel, "Résolution", _RES_LABEL_LIST, self._on_resolution_preset
@@ -333,9 +368,6 @@ class ArtGeneratorApp(tk.Tk):
         ttk.Label(panel, text="Fond", font=("", 10, "bold")).pack(anchor="w")
         self._bg_var = self._labelled_combo(panel, "Type", _BACKGROUNDS, self._on_background)
         self._vignette_var = self._labelled_scale(panel, "Vignette", 0.0, 0.6, self._on_vignette)
-
-        self._build_animation_section(panel)
-        self._bind_wheel(panel, self._left_canvas)
 
     def _build_animation_section(self, panel) -> None:
         """Section Animation : effets cochables, aperçu animé, export vidéo."""
@@ -385,8 +417,44 @@ class ArtGeneratorApp(tk.Tk):
         self._status = ttk.Label(panel, text="Molette : zoom · glisser : déplacer · double-clic : ajuster")
         self._status.grid(row=1, column=0, sticky="w", pady=(6, 0))
 
+        self._build_compare_bar(panel)
+
+    def _build_compare_bar(self, panel) -> None:
+        """Barre de comparaison : fige un aperçu et le confronte au rendu courant.
+
+        Le curseur « volet » balaie l'affichage : partie gauche = aperçu figé
+        (ancien), partie droite = rendu courant (nouveau). Le curseur et le bouton
+        de sortie restent masqués tant qu'aucune référence n'est figée.
+        """
+        bar = ttk.Frame(panel)
+        bar.grid(row=2, column=0, sticky="ew", pady=(6, 0))
+        bar.columnconfigure(2, weight=1)
+
+        self._compare_btn = ttk.Button(bar, text="📌 Figer pour comparer", command=self._capture_compare)
+        self._compare_btn.grid(row=0, column=0, sticky="w")
+
+        self._compare_restore_btn = ttk.Button(
+            bar, text="⟲ Restaurer l'état figé", command=self._restore_compare
+        )
+        self._compare_restore_btn.grid(row=0, column=1, sticky="w", padx=(6, 0))
+
+        self._compare_split_var = tk.DoubleVar(value=self._compare_split)
+        self._compare_scale = ttk.Scale(
+            bar, from_=0.0, to=1.0, variable=self._compare_split_var,
+            command=lambda _v: self._on_compare_split(),
+        )
+        self._compare_scale.grid(row=0, column=2, sticky="ew", padx=6)
+
+        self._compare_exit_btn = ttk.Button(bar, text="✕", width=3, command=self._exit_compare)
+        self._compare_exit_btn.grid(row=0, column=3, sticky="e")
+
+        self._set_compare_active(False)
+
     def _build_right_panel(self) -> None:
         panel, self._right_canvas = self._make_scroll_panel(2)
+
+        self._build_render_section(panel)
+        ttk.Separator(panel).pack(fill="x", pady=6)
 
         ttk.Label(panel, text="Couche", font=("", 11, "bold")).pack(anchor="w")
         self._layer_var = tk.StringVar()
@@ -404,9 +472,10 @@ class ArtGeneratorApp(tk.Tk):
         self._palette_btn = ttk.Button(panel, text="Palette aléatoire", command=self._random_palette)
         self._palette_btn.pack(fill="x", pady=2)
         self._editor_widgets.append(self._palette_btn)
-        self._params_btn = ttk.Button(panel, text="Paramètres équation…", command=self._edit_params)
-        self._params_btn.pack(fill="x", pady=2)
-        self._editor_widgets.append(self._params_btn)
+        ttk.Separator(panel).pack(fill="x", pady=6)
+        ttk.Label(panel, text="Paramètres équation", font=("", 10, "bold")).pack(anchor="w")
+        self._params_frame = ttk.Frame(panel)
+        self._params_frame.pack(fill="x", pady=2)
 
         ttk.Separator(panel).pack(fill="x", pady=6)
         self._blend_var = self._labelled_combo(panel, "Fusion", _BLEND_MODES, lambda v: self._set_layer("blend_mode", v), register=True)
@@ -448,17 +517,16 @@ class ArtGeneratorApp(tk.Tk):
             self._bg_var.set(self.genome.background)
             self._vignette_var.set(float(self.genome.background_params.get("vignette", 0.0)))
             n = len(self.genome.layers)
-            self._layer_combo["values"] = [
-                _layer_label(layer, i, n) for i, layer in enumerate(self.genome.layers)
-            ]
             if n == 0:
+                self._layer_combo["values"] = []
                 self._current_layer = 0
                 self._layer_var.set("(aucune couche)")
+                self._build_params_form()
                 self._set_editor_enabled(False)
                 self._delete_btn.state(["disabled"])
                 return
             self._current_layer = min(self._current_layer, n - 1)
-            self._layer_var.set(_layer_label(self._layer, self._current_layer, n))
+            self._refresh_layer_labels()
             self._set_editor_enabled(True)
             self._delete_btn.state(["!disabled"])  # supprimer jusqu'à 0 couche est permis
             self._refresh_layer()
@@ -542,11 +610,25 @@ class ArtGeneratorApp(tk.Tk):
         self._warp_var.set(layer.warp)
         self._cnoise_var.set(layer.color_noise)
         self._lnoise_var.set(layer.light_noise)
+        self._build_params_form()
+
+    def _refresh_layer_labels(self) -> None:
+        """Régénère les libellés de la liste des couches depuis l'état courant.
+
+        Le libellé encode la famille, la symétrie, etc. ; il doit donc suivre
+        toute édition de la couche (sinon il affiche l'ancienne configuration).
+        """
+        n = len(self.genome.layers)
+        self._layer_combo["values"] = [
+            _layer_label(layer, i, n) for i, layer in enumerate(self.genome.layers)
+        ]
+        self._layer_var.set(_layer_label(self._layer, self._current_layer, n))
 
     def _set_layer(self, field: str, value) -> None:
         if self._loading or not self.genome.layers:
             return
         setattr(self._layer, field, value)
+        self._refresh_layer_labels()
         self._mark_dirty()
         self._schedule_render()
 
@@ -754,79 +836,86 @@ class ArtGeneratorApp(tk.Tk):
         self._mark_dirty()
         self._schedule_render()
 
-    def _edit_params(self) -> None:
-        """Formulaire typé des paramètres d'équation (un champ par paramètre).
+    def _build_params_form(self) -> None:
+        """(Re)construit le formulaire inline des paramètres d'équation.
 
-        Le type de chaque widget (case à cocher, liste de choix, saisie) est
+        Un champ typé par paramètre (case à cocher, liste de choix, saisie),
         inféré par :mod:`ui.param_form` depuis la valeur courante ; les dicts
         imbriqués (émetteur de particules…) sont aplatis en chemins pointés.
+        Chaque édition s'applique immédiatement, comme les autres réglages.
         """
-        if not self.genome.layers:
-            return
-        layer = self._layer
-        fields = param_form.describe(layer.equation_params, layer.equation_family)
-
-        editor = tk.Toplevel(self)
-        editor.title("Paramètres équation")
-        editor.transient(self)
-        editor.geometry("460x520")
-        editor.columnconfigure(0, weight=1)
-        editor.rowconfigure(0, weight=1)
-
-        # Zone défilante : les familles riches (particules) ont beaucoup de champs.
-        canvas = tk.Canvas(editor, highlightthickness=0)
-        scroll = ttk.Scrollbar(editor, orient="vertical", command=canvas.yview)
-        form = ttk.Frame(canvas, padding=8)
-        form.bind("<Configure>", lambda _e: canvas.configure(scrollregion=canvas.bbox("all")))
-        window = canvas.create_window((0, 0), window=form, anchor="nw")
-        canvas.bind("<Configure>", lambda e: canvas.itemconfigure(window, width=e.width))
-        canvas.configure(yscrollcommand=scroll.set)
-        canvas.grid(row=0, column=0, sticky="nsew")
-        scroll.grid(row=0, column=1, sticky="ns")
-        form.columnconfigure(1, weight=1)
-
-        getters = []  # [(Field, callable -> valeur brute du widget)]
-        for i, fld in enumerate(fields):
-            ttk.Label(form, text=fld.label, width=16).grid(row=i, column=0, sticky="w", pady=3)
-            if fld.kind == "bool":
-                var = tk.BooleanVar(value=bool(fld.value))
-                ttk.Checkbutton(form, variable=var).grid(row=i, column=1, sticky="w")
-            elif fld.kind == "choice":
-                var = tk.StringVar(value=str(fld.value))
-                ttk.Combobox(form, textvariable=var, values=list(fld.choices),
-                             state="readonly").grid(row=i, column=1, sticky="ew")
+        for child in self._params_frame.winfo_children():
+            child.destroy()
+        if self.genome.layers:
+            layer = self._layer
+            fields = param_form.describe(layer.equation_params, layer.equation_family)
+            if fields:
+                for fld in fields:
+                    self._add_param_row(fld)
             else:
-                text = json.dumps(fld.value, ensure_ascii=False) if fld.kind == "json" else str(fld.value)
-                var = tk.StringVar(value=text)
-                ttk.Entry(form, textvariable=var).grid(row=i, column=1, sticky="ew")
-            getters.append((fld, var.get))
+                ttk.Label(self._params_frame, text="Aucun paramètre pour cette équation.").pack(anchor="w")
+        # Les widgets sont recréés à chaque reconstruction : relier la molette
+        # (sinon le survol des champs de saisie « avale » le défilement du panneau).
+        self._bind_wheel(self._params_frame, self._right_canvas)
 
-        if not fields:
-            ttk.Label(form, text="Aucun paramètre pour cette équation.").grid(row=0, column=0)
+    def _add_param_row(self, fld) -> None:
+        """Ajoute une ligne « étiquette + widget » pour un paramètre d'équation."""
+        row = ttk.Frame(self._params_frame)
+        row.pack(fill="x", pady=1)
+        ttk.Label(row, text=fld.label, width=16).pack(side="left")
+        if fld.kind == "bool":
+            var = tk.BooleanVar(value=bool(fld.value))
+            ttk.Checkbutton(
+                row, variable=var,
+                command=lambda: self._apply_param(fld.path, fld.kind, var.get(), notify=True),
+            ).pack(side="left")
+        elif fld.kind == "choice":
+            var = tk.StringVar(value=str(fld.value))
+            combo = ttk.Combobox(row, textvariable=var, values=list(fld.choices), state="readonly")
+            combo.pack(side="left", fill="x", expand=True)
+            combo.bind("<<ComboboxSelected>>",
+                       lambda _e: self._apply_param(fld.path, fld.kind, var.get(), notify=True))
+        else:
+            baseline = json.dumps(fld.value, ensure_ascii=False) if fld.kind == "json" else str(fld.value)
+            state = {"text": baseline}
+            var = tk.StringVar(value=baseline)
+            entry = ttk.Entry(row, textvariable=var)
+            entry.pack(side="left", fill="x", expand=True)
 
-        buttons = ttk.Frame(editor, padding=(8, 0, 8, 8))
-        buttons.grid(row=1, column=0, columnspan=2, sticky="ew")
-
-        def apply() -> None:
-            updates = []
-            for fld, get in getters:
-                try:
-                    updates.append((fld.path, param_form.coerce(fld.kind, get())))
-                except Exception as exc:
-                    messagebox.showerror(
-                        "Paramètres équation",
-                        f"Champ « {fld.label} » invalide : {exc}",
-                        parent=editor,
-                    )
+            def commit(notify: bool) -> None:
+                raw = var.get()
+                if raw == state["text"]:
                     return
-            layer.equation_params = param_form.assemble(layer.equation_params, updates)
-            self._mark_dirty()
-            self._refresh_all()
-            self._schedule_render()
-            editor.destroy()
+                if self._apply_param(fld.path, fld.kind, raw, notify=notify):
+                    state["text"] = raw
+                elif not notify:  # saisie invalide en quittant : on restaure
+                    var.set(state["text"])
 
-        ttk.Button(buttons, text="Appliquer", command=apply).pack(side="right")
-        ttk.Button(buttons, text="Annuler", command=editor.destroy).pack(side="right", padx=(0, 6))
+            entry.bind("<Return>", lambda _e: commit(True))
+            entry.bind("<FocusOut>", lambda _e: commit(False))
+
+    def _apply_param(self, path, kind: str, raw, *, notify: bool) -> bool:
+        """Applique une valeur de paramètre au génome ; renvoie le succès.
+
+        Sur saisie invalide, signale l'erreur (si ``notify``) et laisse le génome
+        inchangé.
+        """
+        if self._loading or not self.genome.layers:
+            return False
+        try:
+            value = param_form.coerce(kind, raw)
+        except Exception as exc:
+            if notify:
+                messagebox.showerror(
+                    "Paramètres équation", f"Valeur invalide : {exc}", parent=self
+                )
+            return False
+        layer = self._layer
+        layer.equation_params = param_form.assemble(layer.equation_params, [(path, value)])
+        self._mark_dirty()
+        self._refresh_layer_labels()
+        self._schedule_render()
+        return True
 
     # -- gestion des couches --------------------------------------------------
 
@@ -1062,7 +1151,13 @@ class ArtGeneratorApp(tk.Tk):
                 pass
             start = time.perf_counter()
             try:
-                img = preview.render_preview(snapshot, point_cap=preview.DRAFT_POINT_CAP)
+                # Aperçu à la résolution choisie (grand côté du génome = pas de
+                # plafond, jamais d'agrandissement) : fidèle à l'export. Le plafond
+                # de points garde le rendu réactif malgré la taille.
+                full_side = max(snapshot.width, snapshot.height)
+                img = preview.render_preview(
+                    snapshot, max_side=full_side, point_cap=preview.DRAFT_POINT_CAP
+                )
                 elapsed = time.perf_counter() - start
                 self._result_q.put((request_id, img, elapsed, None))
             except Exception as exc:  # pragma: no cover - robustesse UI
@@ -1133,9 +1228,67 @@ class ArtGeneratorApp(tk.Tk):
         return ((cw - self._preview_image.width * scale) / 2,
                 (ch - self._preview_image.height * scale) / 2)
 
+    # -- mode comparaison -----------------------------------------------------
+
+    def _set_compare_active(self, active: bool) -> None:
+        """Affiche ou masque les contrôles de comparaison (restaurer, curseur, sortie)."""
+        widgets = (self._compare_restore_btn, self._compare_scale, self._compare_exit_btn)
+        if active:
+            for w in widgets:
+                w.grid()
+            self._compare_btn.configure(text="📌 Re-figer l'aperçu")
+        else:
+            for w in widgets:
+                w.grid_remove()
+            self._compare_btn.configure(text="📌 Figer pour comparer")
+
+    def _capture_compare(self) -> None:
+        """Fige l'aperçu courant et son génome comme référence, puis active la comparaison."""
+        if self._preview_image is None:
+            return
+        self._compare_ref = self._preview_image.copy()
+        self._compare_genome = copy.deepcopy(self.genome)
+        self._compare_layer = self._current_layer
+        self._set_compare_active(True)
+        self._draw_preview()
+
+    def _restore_compare(self) -> None:
+        """Rétablit le formulaire (génome) dans l'état ayant produit l'aperçu figé."""
+        if self._compare_genome is None:
+            return
+        self._current_layer = self._compare_layer
+        self._set_genome(copy.deepcopy(self._compare_genome), dirty=True)
+
+    def _exit_compare(self) -> None:
+        """Quitte la comparaison et revient à l'aperçu simple."""
+        self._compare_ref = None
+        self._compare_genome = None
+        self._set_compare_active(False)
+        self._draw_preview()
+
+    def _on_compare_split(self) -> None:
+        self._compare_split = float(self._compare_split_var.get())
+        self._draw_preview()
+
+    def _display_image(self) -> Image.Image | None:
+        """Image à afficher : composite ancien|nouveau en comparaison, sinon l'aperçu brut."""
+        new = self._preview_image
+        if new is None or self._compare_ref is None:
+            return new
+        ref = self._compare_ref
+        if ref.size != new.size:  # format changé depuis le figeage : réaligner
+            ref = ref.resize(new.size, Image.BILINEAR)
+        split_x = int(round(self._compare_split * new.width))
+        out = new.copy()
+        if split_x > 0:
+            out.paste(ref.crop((0, 0, split_x, new.height)), (0, 0))
+        if 0 < split_x < new.width:  # trait de séparation du volet
+            ImageDraw.Draw(out).line([(split_x, 0), (split_x, new.height)], fill=(255, 255, 255), width=2)
+        return out
+
     def _draw_preview(self) -> None:
         """Dessine l'aperçu au zoom/décalage courants (portion visible seulement)."""
-        img = self._preview_image
+        img = self._display_image()
         if img is None:
             return
         cw = self._canvas.winfo_width()
