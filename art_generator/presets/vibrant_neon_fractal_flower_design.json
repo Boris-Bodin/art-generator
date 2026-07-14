@@ -1,0 +1,174 @@
+{
+  "seed": 1954974687,
+  "width": 4000,
+  "height": 5600,
+  "background": "gradient",
+  "background_params": {
+    "top": [
+      0.07617021115349613,
+      0.21317411864422883,
+      0.09310490507055286
+    ],
+    "bottom": [
+      0.06270865005100462,
+      0.021221869245845206,
+      0.05758057781272249
+    ],
+    "angle": 79.40613295883648,
+    "vignette": 0.0
+  },
+  "layers": [
+    {
+      "equation_family": "vector_field",
+      "equation_params": {
+        "a": 3.5,
+        "b": 1.7,
+        "c": 1.5,
+        "d": 3.0,
+        "dt": 0.012,
+        "n_particles": 1720,
+        "seed": 1072995
+      },
+      "n_points": 239026,
+      "palette": {
+        "mode": "hsl",
+        "name": "",
+        "offset": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "amp": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "freq": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "phase": [
+          0.0,
+          0.33,
+          0.67
+        ],
+        "hue": [
+          0.7106918697191011,
+          0.6965993938044376
+        ],
+        "sat": 0.9420224868728861,
+        "val": 0.48400378854299314,
+        "stops": null
+      },
+      "color_by": "t",
+      "color_source": "sample",
+      "blend_mode": "add",
+      "opacity": 0.8,
+      "render_model": "light",
+      "framing": "density",
+      "thickness": 3.0,
+      "glow": 0.8,
+      "exposure": 1.43,
+      "symmetry": "radial",
+      "symmetry_order": 8,
+      "noise_type": "simplex",
+      "warp": 0.0,
+      "warp_freq": 2.3110479996187325,
+      "color_noise": 0.0,
+      "light_noise": 0.0,
+      "thickness_noise": 2.0,
+      "noise_seed": 677904952,
+      "noise_3d": false,
+      "noise_z": 0.0
+    },
+    {
+      "equation_family": "vector_field",
+      "equation_params": {
+        "a": 3.5,
+        "b": 1.7,
+        "c": 1.5,
+        "d": 3.0,
+        "dt": 0.012,
+        "n_particles": 500,
+        "seed": 1072995
+      },
+      "n_points": 200000,
+      "palette": {
+        "mode": "gradient",
+        "name": "harmony:split_complementary",
+        "offset": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "amp": [
+          0.5,
+          0.5,
+          0.5
+        ],
+        "freq": [
+          1.0,
+          1.0,
+          1.0
+        ],
+        "phase": [
+          0.0,
+          0.33,
+          0.67
+        ],
+        "hue": [
+          0.0,
+          1.0
+        ],
+        "sat": 0.7,
+        "val": 1.0,
+        "stops": [
+          [
+            0.0,
+            0.19118730806773304,
+            0.759040338322281,
+            0.9402805969755057
+          ],
+          [
+            0.5,
+            0.9276802477109224,
+            0.06849609451424221,
+            0.2902118485477827
+          ],
+          [
+            1.0,
+            0.9380131668186644,
+            0.7373673116583608,
+            0.16047825546432565
+          ]
+        ]
+      },
+      "color_by": "t",
+      "color_source": "sample",
+      "blend_mode": "difference",
+      "opacity": 0.6555555555555556,
+      "render_model": "light",
+      "framing": "density",
+      "thickness": 2.0666666666666664,
+      "glow": 0.5111111111111111,
+      "exposure": 0.9133333333333333,
+      "symmetry": "radial",
+      "symmetry_order": 9,
+      "noise_type": "fbm",
+      "warp": 0.0,
+      "warp_freq": 1.5,
+      "color_noise": 0.0,
+      "light_noise": 0.0,
+      "thickness_noise": 0.0,
+      "noise_seed": 0,
+      "noise_3d": false,
+      "noise_z": 0.0
+    }
+  ],
+  "animation": null,
+  "title": "Vibrant Neon Fractal Flower Design",
+  "comment": "",
+  "created": "2026-07-14T08:47:17.038567+00:00",
+  "version": 1
+}
