@@ -11,3 +11,4 @@ build/
 public/vendor/art_generator-*.whl
 public/build.json
 public/presets.json
+/art_generator/presets/*.png
